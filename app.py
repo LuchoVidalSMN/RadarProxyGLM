@@ -136,8 +136,8 @@ def load_airport_data(path_csv):
 def load_and_process_data(start_window_datetime, _fs_param):
     
     # Límites espaciales (movidos arriba para usarlos en la lectura)
-    lat_min, lat_max = -46.0, -18.0
-    lon_min, lon_max = -72.0, -45.0
+    lat_min, lat_max = -45.0, -19.0
+    lon_min, lon_max = -75.0, -50.0
 
     # --- RUTAS RELATIVAS A LOS ARCHIVOS DE DATOS EN TU REPOSITORIO GITHUB ---
     path_shape_depto_rel = './data/shp_arg/operativo/departamentos_edit.shp'
@@ -380,10 +380,10 @@ def plot_interactive_map_streamlit(
         ax.add_geometries([poly], ccrs.PlateCarree(),
                           facecolor='none', edgecolor=edge_color, linewidth=line_width, linestyle='-', zorder=zorder)
 
-    plt.title(
-        f"GOES-19 Canal 13 IR + Proxy radar GLM 5-min\n"
-        f"{start_window.strftime('%Y-%m-%d %H:%M UTC')}", fontsize=12
-    )
+    #plt.title(
+    #    f"GOES-19 Canal 13 IR + Proxy radar GLM 5-min\n"
+    #    f"{start_window.strftime('%Y-%m-%d %H:%M UTC')}", fontsize=12
+    #)
     plt.tight_layout()
     return fig
 
@@ -413,7 +413,7 @@ else:
     col1, col2 = st.columns([1, 1])
 
     with col2:
-        st.header("Métricas de Polígonos")
+        st.header("Métricas")
         options = [f"ID: {int(row.ID)}, MaxdBZ: {row.MaxRef:.2f}, MaxFED: {row.MaxFED:.2f}"
                    for idx, row in metrics_df.iterrows()]
         options.insert(0, "-- Seleccionar Polígono --")
