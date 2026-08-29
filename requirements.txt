@@ -12,4 +12,4 @@ ipywidgets
 streamlit>=1.38.0
 tqdm
 imageio
-pyarrow>=27.0.0
+pyarrow!=25.0.1
