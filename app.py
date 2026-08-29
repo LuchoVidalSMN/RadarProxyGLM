@@ -136,8 +136,8 @@ def load_airport_data(path_csv):
 def load_and_process_data(start_window_datetime, _fs_param):
     
     # Límites espaciales (movidos arriba para usarlos en la lectura)
-    lat_min, lat_max = -45.0, -19.0
-    lon_min, lon_max = -75.0, -50.0
+    lat_min, lat_max = -46.0, -18.0
+    lon_min, lon_max = -72.0, -45.0
 
     # --- RUTAS RELATIVAS A LOS ARCHIVOS DE DATOS EN TU REPOSITORIO GITHUB ---
     path_shape_depto_rel = './data/shp_arg/operativo/departamentos_edit.shp'
