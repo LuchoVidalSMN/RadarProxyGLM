@@ -256,12 +256,12 @@ def load_and_process_data(start_window_datetime, _fs_param):
 
             metrics_list.append({
                 'ID': poly_id,
-                'Centroid_Lon': centroid_lon,
-                'Centroid_Lat': centroid_lat,
-                'Pixels_Inside': num_pixels,
-                'Max_Reflectivity_dBZ': max_reflectivity,
-                'Max_FED': max_fed,
-                'Min_IR_Temp_C': min_ir_temp
+                'CenLon': centroid_lon,
+                'CenLat': centroid_lat,
+                'Pixels': num_pixels,
+                'MaxRef': max_reflectivity,
+                'MaxFED': max_fed,
+                'MinIR': min_ir_temp
             })
 
     metrics_df = pd.DataFrame(metrics_list)
@@ -394,11 +394,11 @@ else:
     metrics_df = data["metrics_df"]
 
     # Columna izquierda para el mapa, columna derecha para la tabla y selección
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([1, 1])
 
     with col2:
         st.header("Métricas de Polígonos")
-        options = [f"ID: {row.ID}, Max_dBZ: {row.Max_Reflectivity_dBZ:.2f}, Max_FED: {row.Max_FED:.2f}"
+        options = [f"ID: {int(row.ID)}, MaxdBZ: {row.MaxRef:.2f}, MaxFED: {row.MaxFED:.2f}"
                    for idx, row in metrics_df.iterrows()]
         options.insert(0, "-- Seleccionar Polígono --")
 
@@ -410,9 +410,9 @@ else:
 
         highlight_poly_id = None
         if selected_option != "-- Seleccionar Polígono --":
-            highlight_poly_id = int(selected_option.split(',')[0].replace('ID: ', ''))
+            highlight_poly_id = int(float(selected_option.split(',')[0].replace('ID: ', '')))
 
-        st.dataframe(metrics_df, height=300)
+        st.dataframe(metrics_df, height=600)
 
         # Botón de descarga para metrics_df como CSV
         if not metrics_df.empty:
