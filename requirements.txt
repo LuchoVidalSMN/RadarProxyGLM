@@ -9,6 +9,7 @@ Pillow
 scikit-image
 shapely
 ipywidgets
-streamlit
+streamlit>=1.38.0
 tqdm
 imageio
+pyarrow>=27.0.0
