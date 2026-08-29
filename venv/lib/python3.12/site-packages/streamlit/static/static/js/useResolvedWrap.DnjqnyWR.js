@@ -1,0 +1,1 @@
+import{o as e}from"./rolldown-runtime.C0FnF6B9.js";import{r as t}from"./emotion-is-prop-valid.esm.CuYlOKOk.js";import{t as n}from"./FlexContext.CiIL1cCY.js";var r=e(t(),1);function i(e){let t=(0,r.useContext)(n)?.isInHorizontalLayout??!1;return e??!t}export{i as t};

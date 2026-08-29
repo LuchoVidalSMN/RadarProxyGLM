@@ -1,0 +1,1 @@
+import{o as e}from"./rolldown-runtime.C0FnF6B9.js";import{r as t}from"./emotion-is-prop-valid.esm.CuYlOKOk.js";var n=(0,e(t(),1).createContext)({isFullScreen:!1,setFullScreen:()=>{}});n.displayName=`ViewStateContext`;export{n as t};

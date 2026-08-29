@@ -1,0 +1,1 @@
+var e=`portal`,t=`stFloatingOverlayPortal`;export{t as n,e as t};
