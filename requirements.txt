@@ -1,0 +1,14 @@
+s3fs
+numpy
+pandas
+netCDF4
+matplotlib
+cartopy
+scipy
+Pillow
+scikit-image
+shapely
+ipywidgets
+streamlit
+tqdm
+imageio
