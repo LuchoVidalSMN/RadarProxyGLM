@@ -1,4 +1,3 @@
-
 # ============================================================================ #
 
 import io
@@ -79,8 +78,6 @@ def get_abi_c13_file(_fs, target_time):
     files = _fs.glob(f"{folder_path}*C13_*_{time_prefix}*")
     return files[0] if files else None
 
-# La función cluster_and_get_polygons también debe estar definida en app.py
-# Es una función intensiva, por lo que st.cache_data es muy útil aquí.
 @st.cache_data
 def cluster_and_get_polygons(reflectivity_data, threshold_dbz, lon_mesh, lat_mesh):
     thresholded_data = reflectivity_data >= threshold_dbz
@@ -112,23 +109,20 @@ def cluster_and_get_polygons(reflectivity_data, threshold_dbz, lon_mesh, lat_mes
                     if not poly.is_empty and poly.is_valid:
                         polygons.append(poly)
                 except Exception as e:
-                    st.warning(f"Error creando Polígono del contorno: {e}") # st.warning para Streamlit
+                    st.warning(f"Error creando Polígono del contorno: {e}")
 
     return polygons
 
-@st.cache_resource # st.cache_resource es mejor para objetos no serializables como ShapelyFeature
+@st.cache_resource 
 def load_shape_features(path_shp):
-    """Carga un shapefile y devuelve un objeto ShapelyFeature."""
     try:
         return ShapelyFeature(Reader(path_shp).geometries(), ccrs.PlateCarree())
     except Exception as e:
         st.error(f"Error cargando shapefile {path_shp}: {e}")
         return None
 
-
-@st.cache_data # cache_data para DataFrames
+@st.cache_data 
 def load_airport_data(path_csv):
-    """Carga los datos de aeropuertos desde un CSV."""
     try:
         return pd.read_csv(path_csv,
                          sep=r'\s+',
@@ -138,26 +132,24 @@ def load_airport_data(path_csv):
         st.error(f"Error cargando datos de aeropuertos {path_csv}: {e}")
         return pd.DataFrame()
 
-
-@st.cache_data(ttl=3600) # Cachea los resultados de todo el procesamiento de datos
+@st.cache_data(ttl=3600) 
 def load_and_process_data(start_window_datetime, _fs_param):
-    # fs = s3fs.S3FileSystem(anon=True) # Ya no se crea aquí, se recibe como _fs_param
+    
+    # Límites espaciales (movidos arriba para usarlos en la lectura)
+    lat_min, lat_max = -45.0, -19.0
+    lon_min, lon_max = -75.0, -50.0
 
     # --- RUTAS RELATIVAS A LOS ARCHIVOS DE DATOS EN TU REPOSITORIO GITHUB ---
-    # Asegúrate de que estos archivos estén en la estructura 'data/' en tu repo.
     path_shape_depto_rel = './data/shp_arg/operativo/departamentos_edit.shp'
     path_shape_prov_rel = './data/shp_arg/operativo/provincias_edit.shp'
     path_shape_paises_rel = './data/shp_arg/cartopy/10m_admin_0_countries.shp'
-    path_dir_FIR_rel = './data/fir_txt/FIR_aeropuertos.txt' # Ruta completa al archivo TXT
+    path_dir_FIR_rel = './data/fir_txt/FIR_aeropuertos.txt' 
     path_fir_ezeiza_rel = './data/shp_arg/FIR/FIR_EZEIZA_backup.shp'
     path_fir_cordoba_rel = './data/shp_arg/FIR/FIR_CORDOBA.shp'
     path_fir_resistencia_rel = './data/shp_arg/FIR/FIR_RESISTENCIA.shp'
     path_fir_mendoza_rel = './data/shp_arg/FIR/FIR_MENDOZA.shp'
     path_fir_comodoro_rel = './data/shp_arg/FIR/FIR_COMODORO.shp'
 
-    # Cargar shapefiles y datos de aeropuertos
-    # municipios = load_shape_features(path_shape_depto_rel) # Si lo necesitas, descomenta
-    # provincias = load_shape_features(path_shape_prov_rel) # Si lo necesitas, descomenta
     paises = load_shape_features(path_shape_paises_rel)
     df_airports = load_airport_data(path_dir_FIR_rel)
     fir_ezeiza = load_shape_features(path_fir_ezeiza_rel)
@@ -166,40 +158,68 @@ def load_and_process_data(start_window_datetime, _fs_param):
     fir_mendoza = load_shape_features(path_fir_mendoza_rel)
     fir_comodoro = load_shape_features(path_fir_comodoro_rel)
 
-
     # --- Carga y preprocesamiento de datos GLM y ABI ---
-    glm_files = get_glm_files_for_window(_fs_param, start_window_datetime, minutes=10)
+    # Reducimos los minutos a 3 para ahorrar memoria
+    glm_files = get_glm_files_for_window(_fs_param, start_window_datetime, minutes=3)
     abi_file = get_abi_c13_file(_fs_param, start_window_datetime)
 
     if not glm_files:
         st.warning(f"No se encontraron archivos GLM para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
-        return None # O manejar el caso de no datos
+        return None 
     if abi_file is None:
         st.warning(f"No se encontró archivo ABI C13 para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
-        return None # O manejar el caso de no datos
+        return None 
 
+    # Leer y recortar GLM al vuelo
     accumulated_lats = []
     accumulated_lons = []
     for file_path in glm_files:
         with _fs_param.open(file_path, "rb") as f:
             with Dataset("dummy", mode="r", memory=f.read()) as nc:
-                accumulated_lats.extend(nc.variables["flash_lat"][:])
-                accumulated_lons.extend(nc.variables["flash_lon"][:])
+                lats = nc.variables["flash_lat"][:]
+                lons = nc.variables["flash_lon"][:]
+                # Aplicar máscara espacial
+                mask = (lats >= lat_min) & (lats <= lat_max) & (lons >= lon_min) & (lons <= lon_max)
+                accumulated_lats.extend(lats[mask])
+                accumulated_lons.extend(lons[mask])
 
     all_lats = np.array(accumulated_lats)
     all_lons = np.array(accumulated_lons)
 
+    # Leer y recortar ABI al vuelo
     with _fs_param.open(abi_file, "rb") as f:
         with Dataset("dummy", mode="r", memory=f.read()) as nc:
-            ir_data = nc.variables["CMI"][:] - 273.15
             proj_info = nc.variables["goes_imager_projection"]
             h = proj_info.perspective_point_height
-            x = nc.variables["x"][:] * h
-            y = nc.variables["y"] * h
+            
+            x_rad = nc.variables["x"][:]
+            y_rad = nc.variables["y"][:]
+            x_full = x_rad * h
+            y_full = y_rad * h
+            
             abi_crs = ccrs.Geostationary(central_longitude=proj_info.longitude_of_projection_origin, satellite_height=h)
+            
+            # Transformar límites a proyección geoestacionaria
+            point_ul = abi_crs.transform_point(lon_min, lat_max, ccrs.PlateCarree())
+            point_lr = abi_crs.transform_point(lon_max, lat_min, ccrs.PlateCarree())
+            
+            x_min_proj, x_max_proj = point_ul[0], point_lr[0]
+            y_min_proj, y_max_proj = point_lr[1], point_ul[1] # Eje Y invertido en GOES
 
-    lat_min, lat_max = -45.0, -19.0
-    lon_min, lon_max = -75.0, -50.0
+            idx_x = np.where((x_full >= x_min_proj) & (x_full <= x_max_proj))[0]
+            idx_y = np.where((y_full >= y_min_proj) & (y_full <= y_max_proj))[0]
+            
+            if len(idx_x) > 0 and len(idx_y) > 0:
+                x_start, x_end = idx_x[0], idx_x[-1] + 1
+                y_start, y_end = idx_y[0], idx_y[-1] + 1
+                
+                # Cargar solo el subconjunto de la matriz CMI
+                ir_data = nc.variables["CMI"][y_start:y_end, x_start:x_end] - 273.15
+                x = x_full[x_start:x_end]
+                y = y_full[y_start:y_end]
+            else:
+                ir_data, x, y = None, None, None
+
     grid_res_high = 0.05
     lat_bins_high = np.arange(lat_min, lat_max + grid_res_high, grid_res_high)
     lon_bins_high = np.arange(lon_min, lon_max + grid_res_high, grid_res_high)
@@ -221,7 +241,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
     warning_polygons = cluster_and_get_polygons(max_reflectivity_proxy, warning_threshold_dbz, lon_mesh_high, lat_mesh_high)
 
     metrics_list = []
-    if warning_polygons:
+    if warning_polygons and ir_data is not None:
         lon_flat = lon_mesh_high.flatten()
         lat_flat = lat_mesh_high.flatten()
         grid_points = [Point(lon, lat) for lon, lat in zip(lon_flat, lat_flat)]
@@ -291,7 +311,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
     }
 
 # ============================================================================ #
-# 2. Función para dibujar el mapa (adaptada de tu cuaderno)                   #
+# 2. Función para dibujar el mapa                                             #
 # ============================================================================ #
 
 def plot_interactive_map_streamlit(
@@ -307,12 +327,13 @@ def plot_interactive_map_streamlit(
 
     ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
 
-    im_ir = ax.imshow(
-        ir_data, origin="upper",
-        extent=[x.min(), x.max(), y.min(), y.max()],
-        transform=abi_crs,
-        cmap="Greys", vmin=-90, vmax=40, zorder=1
-    )
+    if ir_data is not None:
+        im_ir = ax.imshow(
+            ir_data, origin="upper",
+            extent=[x.min(), x.max(), y.min(), y.max()],
+            transform=abi_crs,
+            cmap="Greys", vmin=-90, vmax=40, zorder=1
+        )
 
     proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 10, max_reflectivity_proxy)
 
@@ -371,30 +392,24 @@ def plot_interactive_map_streamlit(
 # ============================================================================ #
 
 st.set_page_config(layout="wide")
-st.image("smn_horizontal_arg-01.jpg", width=250) # Puedes ajustar el número para cambiar el tamaño
+st.image("smn_horizontal_arg-01.jpg", width=250) 
 st.title("Producto TS-SIGMET | Dashboard Interactivo ")
 
-# Selector de fecha/hora para permitir al usuario elegir el momento a visualizar
-# Puedes establecer un rango por defecto o fechas con datos conocidos.
-initial_datetime = datetime(2025, 11, 4, 3, 0, 0) # Fecha de ejemplo con actividad
+initial_datetime = datetime(2025, 11, 4, 3, 0, 0) 
 
-# Streamlit slider para seleccionar la hora (solo la hora, para simplificar)
-# O puedes usar st.date_input y st.time_input para control total
 selected_date = st.date_input("Selecciona la fecha", value=initial_datetime.date())
-selected_time = st.time_input("Selecciona la hora (UTC)", value=initial_datetime.time(), step=300) # Paso de 5 minutos
+selected_time = st.time_input("Selecciona la hora (UTC)", value=initial_datetime.time(), step=300) 
 
 start_window_user = datetime.combine(selected_date, selected_time)
 
-# Carga y procesa los datos (se cacheará)
 data = load_and_process_data(start_window_user, fs_global)
 
-if data is None: # Si no se pudieron cargar los datos (ej. archivos GLM/ABI no encontrados)
+if data is None: 
     st.warning("No se pudieron cargar los datos para la fecha y hora seleccionadas. Intenta con otra fecha/hora.")
 else:
     warning_polygons = data["warning_polygons"]
     metrics_df = data["metrics_df"]
 
-    # Columna izquierda para el mapa, columna derecha para la tabla y selección
     col1, col2 = st.columns([1, 1])
 
     with col2:
@@ -415,7 +430,6 @@ else:
 
         st.dataframe(metrics_df, height=600)
 
-        # Botón de descarga para metrics_df como CSV
         if not metrics_df.empty:
             csv_buffer = io.StringIO()
             metrics_df.to_csv(csv_buffer, index=False)
@@ -438,18 +452,3 @@ else:
             highlight_poly_id=highlight_poly_id
         )
         st.pyplot(fig)
-
-# ============================================================================ #
-
-st.markdown("""
-	    **Cómo ejecutar esta aplicación Streamlit:**
-		1.  Guarda el código anterior como un archivo `.py` (ej. `app.py`).
-		2.  Asegúrate de que tienes un archivo `requirements.txt` con todas las librerías necesarias.
-		3.  Asegúrate de tener tus archivos de datos organizados en la carpeta `data/` dentro de tu repositorio de GitHub.
-		4.  Abre una terminal en el directorio donde guardaste `app.py`.
-		5.  Ejecuta el comando: `streamlit run app.py`
-		6.  Se abrirá una nueva pestaña en tu navegador con la aplicación Streamlit.
-	    """)
-
-# ============================================================================ #
-
