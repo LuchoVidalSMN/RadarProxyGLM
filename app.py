@@ -160,7 +160,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
 
     # --- Carga y preprocesamiento de datos GLM y ABI ---
     # Reducimos los minutos a 3 para ahorrar memoria
-    glm_files = get_glm_files_for_window(_fs_param, start_window_datetime, minutes=3)
+    glm_files = get_glm_files_for_window(_fs_param, start_window_datetime, minutes=5)
     abi_file = get_abi_c13_file(_fs_param, start_window_datetime)
 
     if not glm_files:
