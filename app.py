@@ -371,7 +371,6 @@ def plot_interactive_map_streamlit(
 # ============================================================================ #
 
 st.set_page_config(layout="wide")
-
 st.image("smn_horizontal_arg-01.jpg", width=250) # Puedes ajustar el número para cambiar el tamaño
 st.title("Producto TS-SIGMET | Dashboard Interactivo ")
 
