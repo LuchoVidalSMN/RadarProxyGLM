@@ -15,77 +15,25 @@ import cartopy.feature as cfeature
 from cartopy.io.shapereader import Reader
 from cartopy.feature import ShapelyFeature
 
-from shapely.geometry import Polygon
 from shapely.geometry import Point # Para calcular métricas
 from shapely.geometry import Polygon # Asegúrate de tener shapely instalado
 
-
 from scipy.ndimage import gaussian_filter, label
 from matplotlib.colors import ListedColormap, BoundaryNorm
 
 from skimage.measure import find_contours
 
-
-
 # ============================================================================ #
 
-# SHAPEFILES
-# Asegúrate de que estos archivos (shp, dbf, shx, prj, cpg) estén en el directorio './data/shp_arg/operativo/'
 path_shape_depto = './data/shp_arg/operativo/departamentos_edit.shp'
-# municipios = ShapelyFeature(Reader(path_shape_depto).geometries(), ccrs.PlateCarree())
-
 path_shape_prov = './data/shp_arg/operativo/provincias_edit.shp'
-# provincias = ShapelyFeature(Reader(path_shape_prov).geometries(), ccrs.PlateCarree())
-
 path_shape_paises = './data/shp_arg/cartopy/10m_admin_0_countries.shp'
-# paises = ShapelyFeature(Reader(path_shape_paises).geometries(), ccrs.PlateCarree())
-
-# ============================================================================ #
-
-# AEROPUERTOS
-# Asegúrate de que 'FIR_aeropuertos.txt' esté en './data/fir_txt/'
 path_dir_FIR = './data/fir_txt/'
-# df_aeropuertos = pd.read_csv(path_dir_FIR + 'FIR_aeropuertos.txt',
-#                  sep=r'\s+',
-#                  header=None,
-#                  names=['Codigo ICAO','Lat','Lon'])
-
-# ============================================================================ #
-
-# FIR (Rutas Relativas)
-# Asegúrate de que todos los archivos componentes de cada shapefile FIR estén en './data/shp_arg/FIR/'
 path_fir_ezeiza = './data/shp_arg/FIR/FIR_EZEIZA_backup.shp'
-# fir_ezeiza = ShapelyFeature(Reader(path_fir_ezeiza).geometries(), ccrs.PlateCarree())
 path_fir_cordoba = './data/shp_arg/FIR/FIR_CORDOBA.shp'
-# fir_cordoba = ShapelyFeature(Reader(path_fir_cordoba).geometries(), ccrs.PlateCarree())
 path_fir_resistencia = './data/shp_arg/FIR/FIR_RESISTENCIA.shp'
-# fir_resistencia = ShapelyFeature(Reader(path_fir_resistencia).geometries(), ccrs.PlateCarree())
 path_fir_mendoza = './data/shp_arg/FIR/FIR_MENDOZA.shp'
-# fir_mendoza = ShapelyFeature(Reader(path_fir_mendoza).geometries(), ccrs.PlateCarree())
 path_fir_comodoro = './data/shp_arg/FIR/FIR_COMODORO.shp'
-# fir_comodoro = ShapelyFeature(Reader(path_fir_comodoro).geometries(), ccrs.PlateCarree())
-
-import streamlit as st
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-
-import s3fs
-from netCDF4 import Dataset
-from datetime import datetime, timedelta
-
-from scipy.ndimage import gaussian_filter, label
-from matplotlib.colors import ListedColormap, BoundaryNorm
-
-from cartopy.io.shapereader import Reader
-from cartopy.feature import ShapelyFeature
-
-from skimage.measure import find_contours
-from shapely.geometry import Polygon
-from shapely.geometry import Point # Para calcular métricas
-import io # Importar el módulo io
 
 # ============================================================================ #
 # 0. Definiciones globales o constantes (fuera de funciones para Streamlit)
@@ -423,7 +371,7 @@ def plot_interactive_map_streamlit(
 # ============================================================================ #
 
 st.set_page_config(layout="wide")
-st.title("Dashboard Interactivo de Polígonos de Advertencia")
+st.title("Dashboard Interactivo TS-SIGMET | SMN Argentina")
 
 # Selector de fecha/hora para permitir al usuario elegir el momento a visualizar
 # Puedes establecer un rango por defecto o fechas con datos conocidos.
