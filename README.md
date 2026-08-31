@@ -1,4 +1,4 @@
-# RadarProxyGLM 🌩️✈️
+# GLM-FED Radar Proxy 🌩️✈️
 
 ![Python](https://img.shields.io/badge/python-3.8%2B-blue)
 ![Meteorology](https://img.shields.io/badge/Meteorology-Aviation-orange)
