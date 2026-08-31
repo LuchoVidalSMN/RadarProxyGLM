@@ -152,19 +152,7 @@ La aplicación utiliza datos públicos de [AWS S3](https://registry-opendata-aws
 
 ---
 
-## 🚀 Requisitos e Instalación
-
-Instala las dependencias necesarias mediante `pip`:
-
-```bash
-pip install s3fs netCDF4 numpy matplotlib cartopy scipy
-```
-
----
-
-## Estructura del Proyecto
-
-## Cómo Ejecutar la Aplicación Localmente
+## 🚀 Cómo Ejecutar la Aplicación Localmente
 
 1.  **Clonar el repositorio:**
     ```bash
