@@ -44,8 +44,8 @@ Donde:
 
 ### 3.2 Modelo Lineal por Tramos / Umbrales Discretos (GSI-2)
 Para evitar sobredimensionar la reflectividad en celdas con actividad eléctrica esporádica:
-$$Z_{\text{max, proxy}} = \begin{cases} 
-0 & \text{si } \text{FED} = 0 \\
+
+$$Z_{\text{max, proxy}} = \begin{cases} 0 & \text{si } \text{FED} = 0 \\
 35.0 + C_1 \cdot \text{FED} & \text{si } 0 < \text{FED} \le \text{FED}_{th} \\
 55.0 + C_2 \cdot \log_{10}(\text{FED}) & \text{si } \text{FED} > \text{FED}_{th}
 \end{cases}$$
@@ -74,7 +74,7 @@ La reflectividad se categoriza bajo el estándar operacional de radar de cabina:
 
 ---
 
-### 4.2 Gómez Mayol, Vidal, Salio y Sacco (2020) — Contexto Regional en Sudamérica
+### 4.2 Gómez Mayol y otros (2020) — Contexto Regional en Sudamérica
 * **Referencia:** Gómez Mayol, M., Vidal, L., Salio, P., & Sacco, M. (2020). *Sobre el uso de datos de rayos como proxy para la reflectividad radar en la región central de Argentina*. *Meteorologica*, 45.
 
 #### Aportes Principales:
