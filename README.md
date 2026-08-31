@@ -113,16 +113,6 @@ Para generar un campo de $Z_{proxy}$ operacionalmente balanceado que combine la 
 4. **Bruning, E. C., Tillier, C. E., Edgington, S. F., Rudlosky, S. D., Zajic, J., Gravelle, C., ... & Calhoun, K. (2019).** *Meteorological imagery for the Geostationary Lightning Mapper*. *Journal of Geophysical Research: Atmospheres*, 124(24), 14285-14309.
 
 ---
-
-# 🚀 Requisitos e Instalación
-
-Instala las dependencias necesarias mediante `pip`:
-
-```bash
-pip install s3fs netCDF4 numpy matplotlib cartopy scipy
-
----
-
 ## ✈️ Aplicación Aeronáutica: Automatización de SIGMETs
 
 ### Mitigación de Riesgos en Vuelo
@@ -138,8 +128,7 @@ El **RadarProxyGLM** aborda el desafío de la vigilancia en tiempo real de la si
 
 ---
 
-# Aplicación Interactiva de Polígonos de Advertencia Meteorológica
-
+# Aplicación Interactiva TS-SIGMET
 Esta aplicación Streamlit proporciona un dashboard interactivo para visualizar y analizar polígonos de advertencia generados a partir de datos de satélites GOES-19 (GLM y ABI Canal 13 IR).
 
 ## Características
@@ -156,10 +145,20 @@ Esta aplicación Streamlit proporciona un dashboard interactivo para visualizar 
 
 ## Datos Utilizados
 
-La aplicación utiliza datos públicos de AWS S3 de los satélites GOES-19:
+La aplicación utiliza datos públicos de [AWS S3](https://registry-opendata-aws.translate.goog/noaa-goes/?_x_tr_sl=en&_x_tr_tl=es&_x_tr_hl=es&_x_tr_pto=tc) de los satélites GOES-19:
 
-*   **GLM (Geostationary Lightning Mapper) Nivel 2 LCFA:** Datos de flashes de rayos, utilizados para generar un proxy de reflectividad.
-*   **ABI (Advanced Baseline Imager) Nivel 2 CMIPF Banda 13:** Datos de temperatura de brillo infrarroja, utilizados como capa de fondo para contextualizar la nubosidad.
+*   **GLM (Geostationary Lightning Mapper) Nivel 2 LCFA:** Datos de flashes de rayos, utilizados para generar un proxy de reflectividad. Para más info [Rudlosky et al., 2019](https://doi.org/10.1029/2018GL081052)
+*   **ABI (Advanced Baseline Imager) Nivel 2 CMIPF Banda 13:** Datos de temperatura de brillo infrarroja, utilizados como capa de fondo para contextualizar la nubosidad. Para más info [Schmit et al., 2017](https://doi.org/10.1175/BAMS-D-15-00230.1).
+---
+
+## 🚀 Requisitos e Instalación
+
+Instala las dependencias necesarias mediante `pip`:
+
+```bash
+pip install s3fs netCDF4 numpy matplotlib cartopy scipy
+
+---
 
 ## Estructura del Proyecto
 
