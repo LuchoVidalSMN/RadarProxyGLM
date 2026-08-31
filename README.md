@@ -194,4 +194,4 @@ pip install s3fs netCDF4 numpy matplotlib cartopy scipy
 
 ## Contacto
 
-Para preguntas o sugerencias, por favor abre un 'issue' en este repositorio de GitHub.
+Para preguntas o sugerencias, ponerse en contacto con el Dr. Luciano Vidal (lvidal@smn.gob.ar), de la Dirección de Productos de Modelación Ambiental y de Sensores Remototos del [Servicio Meteorológico Nacional](https://www.smn.gob.ar/) de Argentina.
