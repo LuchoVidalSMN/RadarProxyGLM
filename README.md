@@ -149,6 +149,7 @@ La aplicación utiliza datos públicos de [AWS S3](https://registry-opendata-aws
 
 *   **GLM (Geostationary Lightning Mapper) Nivel 2 LCFA:** Datos de flashes de rayos, utilizados para generar un proxy de reflectividad. Para más info [Rudlosky et al., 2019](https://doi.org/10.1029/2018GL081052)
 *   **ABI (Advanced Baseline Imager) Nivel 2 CMIPF Banda 13:** Datos de temperatura de brillo infrarroja, utilizados como capa de fondo para contextualizar la nubosidad. Para más info [Schmit et al., 2017](https://doi.org/10.1175/BAMS-D-15-00230.1).
+
 ---
 
 ## 🚀 Requisitos e Instalación
@@ -157,6 +158,7 @@ Instala las dependencias necesarias mediante `pip`:
 
 ```bash
 pip install s3fs netCDF4 numpy matplotlib cartopy scipy
+```
 
 ---
 
@@ -189,9 +191,6 @@ pip install s3fs netCDF4 numpy matplotlib cartopy scipy
 
     Esto abrirá la aplicación en tu navegador web por defecto.
 
-## Despliegue en Streamlit Cloud
-
-La aplicación está diseñada para ser fácilmente desplegable en [Streamlit Cloud](https://streamlit.io/cloud). Asegúrate de que tu repositorio de GitHub contiene `app.py`, `requirements.txt` y la estructura de `data/` con todos los archivos necesarios. Luego, sigue las instrucciones de Streamlit Cloud para conectar tu repositorio y desplegar la aplicación.
 
 ## Contacto
 
