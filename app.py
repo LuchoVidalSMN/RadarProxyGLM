@@ -649,19 +649,19 @@ def plot_interactive_map_streamlit(
                          )
 
         # Opcional: Dibujar el ID en el centroide del polígono
-        centroid = poly.centroid
-        ax.text(
-                centroid.x,
-                centroid.y,
-                str(current_id),
-                color=edge_color,
-                fontsize=9,
-                weight="bold",
-                ha="center",
-                va="center",
-                transform=ccrs.PlateCarree(),
-                zorder=zorder + 1,
-               )
+        # centroid = poly.centroid
+        # ax.text(
+        #         centroid.x,
+        #         centroid.y,
+        #         str(current_id),
+        #         color=edge_color,
+        #         fontsize=9,
+        #         weight="bold",
+        #         ha="center",
+        #         va="center",
+        #         transform=ccrs.PlateCarree(),
+        #         zorder=zorder + 1,
+        #        )
         
         # --- DIBUJAR FLECHA DE ORIENTACIÓN DEL EJE MAYOR ---
         if not metrics_df.empty and current_id in metrics_df["ID"].values:
@@ -669,7 +669,7 @@ def plot_interactive_map_streamlit(
             row_poly = metrics_df[metrics_df["ID"] == current_id].iloc[0]
 
             # Solo dibujamos flecha en sistemas con alargamiento perceptible (ej. eje mayor > 40 km)
-            if row_poly.EjeMayor_km >= 40:
+            if row_poly.EjeMayor_km >= 100:
                 cen_x = row_poly.CenLon
                 cen_y = row_poly.CenLat
                 rumbo_deg = float(str(row_poly.Rumbo).replace("°", ""))
@@ -683,18 +683,18 @@ def plot_interactive_map_streamlit(
 
                 # Flecha bidireccional alineada con el eje mayor del Convex Hull
                 ax.annotate(
-                    "",
-                    xy=(cen_x + dlon, cen_y + dlat),
-                    xytext=(cen_x - dlon, cen_y - dlat),
-                    arrowprops=dict(
-                        arrowstyle="<->, head_width=0.4, head_length=0.6",
-                        color="red" if highlight_poly_id == current_id else edge_color,
-                        linewidth=2.0 if highlight_poly_id == current_id else 1.2,
-                        mutation_scale=12,
-                    ),
-                    xycoords=ccrs.PlateCarree()._as_mpl_transform(ax),
-                    zorder=zorder + 1,
-                )
+                            "",
+                            xy=(cen_x + dlon, cen_y + dlat),
+                            xytext=(cen_x - dlon, cen_y - dlat),
+                            arrowprops=dict(
+                                            arrowstyle="<-->, head_width=0.2, head_length=0.3",
+                                            color="red" if highlight_poly_id == current_id else edge_color,
+                                            linewidth=2.0 if highlight_poly_id == current_id else 1.2,
+                                            mutation_scale=12,
+                                           ),
+                            xycoords=ccrs.PlateCarree()._as_mpl_transform(ax),
+                            zorder=zorder + 1,
+                           )
 
     #plt.title(
     #    f"GOES-19 Canal 13 IR + Proxy radar GLM 5-min\n"
