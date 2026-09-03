@@ -602,19 +602,19 @@ def plot_interactive_map_streamlit(
                              alpha=0.75, transform=ccrs.PlateCarree(), zorder=2
                             )
 
-    if paises is not None: ax.add_feature(paises, facecolor='None', edgecolor='gray', linewidth=1.5)
-    if fir_ezeiza is not None: ax.add_feature(fir_ezeiza, facecolor='None', edgecolor='blue', linewidth=1.5, zorder=2)
-    if fir_cordoba is not None: ax.add_feature(fir_cordoba, facecolor='None', edgecolor='blue', linewidth=1.5, zorder=2)
-    if fir_resistencia is not None: ax.add_feature(fir_resistencia, facecolor='None', edgecolor='blue', linewidth=1.5, zorder=2)
-    if fir_mendoza is not None: ax.add_feature(fir_mendoza, facecolor='None', edgecolor='blue', linewidth=1.5, zorder=2)
-    if fir_comodoro is not None: ax.add_feature(fir_comodoro, facecolor='None', edgecolor='blue', linewidth=1.5, zorder=2)
+    if paises is not None: ax.add_feature(paises, facecolor='None', edgecolor='gray', linewidth=1)
+    if fir_ezeiza is not None: ax.add_feature(fir_ezeiza, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
+    if fir_cordoba is not None: ax.add_feature(fir_cordoba, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
+    if fir_resistencia is not None: ax.add_feature(fir_resistencia, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
+    if fir_mendoza is not None: ax.add_feature(fir_mendoza, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
+    if fir_comodoro is not None: ax.add_feature(fir_comodoro, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
                
     if not df_airports.empty:
         for i, type_code in enumerate(df_airports['Codigo ICAO'].values):
             px = df_airports['Lon'].values[i]
             py = df_airports['Lat'].values[i]
             if (lon_min_plot < px < lon_max_plot) and (lat_min_plot < py < lat_max_plot):
-                plt.scatter(px, py, marker='s', s=10, color='b', zorder=5, transform=ccrs.PlateCarree())
+                plt.scatter(px, py, marker='s', s=12, color='b', zorder=5, transform=ccrs.PlateCarree())
                 plt.text(px + 0.15, py - 0.21, type_code, fontsize=8, c='b', clip_on=True, zorder=5, transform=ccrs.PlateCarree())
 
     cbar_proxy = plt.colorbar(
