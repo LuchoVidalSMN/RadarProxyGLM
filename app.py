@@ -780,7 +780,7 @@ else:
             mc3.metric("Área Envolvente", f"{poly_data.Area:.0f} km²")
             mc4.metric("Tipo", f"{poly_data.Escala}")
 
-            mc5, mc6, mc7 = st.columns(4)
+            mc5, mc6, mc7 = st.columns(3)
             mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
             mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")
             mc7.metric("Orientación / Rumbo", f"{poly_data.Rumbo}")
