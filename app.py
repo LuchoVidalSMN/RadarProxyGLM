@@ -780,11 +780,10 @@ else:
             mc3.metric("Área Envolvente", f"{poly_data.Area:.0f} km²")
             mc4.metric("Tipo", f"{poly_data.Escala}")
 
-            mc5, mc6, mc7, mc8 = st.columns(4)
+            mc5, mc6, mc7 = st.columns(4)
             mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
             mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")
             mc7.metric("Orientación / Rumbo", f"{poly_data.Rumbo}")
-            mc8.metric("Vértices", f"{poly_data.N_Vertices}")
             
             # # --- Mostrar las métricas del polígono seleccionado ---
             # st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
