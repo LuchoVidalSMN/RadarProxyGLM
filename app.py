@@ -26,10 +26,10 @@ from skimage.measure import find_contours
 
 # Paleta de colores para radar real
 aviation_colors = [
-		   "#00FF00",  # Verde    (Level 1: 20-30 dBZ) | Débil
-		   "#FFFF00",  # Amarillo (Level 2: 30-40 dBZ) | Moderado
-		   "#FF0000",  # Rojo     (Level 3: 40-50 dBZ) | Fuerte
-		   "#FF00FF",  # Magenta  (Level 4: > 50 dBZ)  | Extremo
+    		           "#00FF00",  # Verde    (Level 1: 20-30 dBZ) | Débil
+    		           "#FFFF00",  # Amarillo (Level 2: 30-40 dBZ) | Moderado
+    		           "#FF0000",  # Rojo     (Level 3: 40-50 dBZ) | Fuerte
+    		           "#FF00FF",  # Magenta  (Level 4: > 50 dBZ)  | Extremo
                   ]
 cmap_aviation = ListedColormap(aviation_colors)
 levels_aviation = [20, 30, 40, 50, 65]
@@ -72,38 +72,148 @@ def rumbo_to_arrow(angle_deg):
     else:
         return "↘ SE-NW"
 
+def compute_sigmet_convex_hull_properties(poly, simplify_deg=0.08):
+    """
+    Calcula el Convex Hull simplificado y sus propiedades morfológicas
+    (eje mayor, eje menor, orientación y área) en unidades físicas (km).
+    """
+    # 1. Envoltura Convexa
+    hull = poly.convex_hull
+
+    # 2. Reducir cantidad de vértices para formato SIGMET (Ramer-Douglas-Peucker)
+    # tolerance en grados: ~0.05° a 0.1° (~6 a 11 km de tolerancia)
+    hull_simplified = hull.simplify(tolerance=simplify_deg, preserve_topology=True)
+    if not hull_simplified.is_valid or hull_simplified.geom_type != "Polygon":
+        hull_simplified = hull
+
+    # 3. Factor de conversión métrica local (geodésico aproximado)
+    centroid_lat = hull_simplified.centroid.y
+    lat_rad = np.radians(centroid_lat)
+    km_per_deg_lat = 111.32
+    km_per_deg_lon = 111.32 * np.cos(lat_rad)
+
+    # 4. Rectángulo Mínimo Orientado (Oriented Bounding Box)
+    # Da las dimensiones principales exactas de la envoltura
+    min_rect = hull_simplified.minimum_rotated_rectangle
+    rect_coords = list(min_rect.exterior.coords)[:-1]
+
+    # Distancias entre lados consecutivos en km
+    lados_km = []
+    vectores = []
+    for k in range(4):
+        p1 = rect_coords[k]
+        p2 = rect_coords[(k + 1) % 4]
+        dx_km = (p2[0] - p1[0]) * km_per_deg_lon
+        dy_km = (p2[1] - p1[1]) * km_per_deg_lat
+        dist_km = np.hypot(dx_km, dy_km)
+        lados_km.append(dist_km)
+        vectores.append((dx_km, dy_km))
+
+    # Identificar eje mayor y eje menor
+    idx_major = int(np.argmax(lados_km[:2]))
+    major_axis_km = max(lados_km[0], lados_km[1])
+    minor_axis_km = min(lados_km[0], lados_km[1])
+
+    # 5. Orientación respecto al Norte (Ángulo azimutal de 0° a 180°)
+    dx_maj, dy_maj = vectores[idx_major]
+    # np.arctan2(dx, dy) mide el ángulo partiendo del Norte (+Y) hacia el Este (+X)
+    angle_deg = np.degrees(np.arctan2(dx_maj, dy_maj)) % 180.0
+
+    # 6. Área del Convex Hull en km²
+    area_hull_km2 = hull_simplified.area * km_per_deg_lon * km_per_deg_lat
+
+    return {
+        "hull_polygon": hull_simplified,
+        "vertices": len(list(hull_simplified.exterior.coords)) - 1,
+        "major_axis_km": round(major_axis_km, 1),
+        "minor_axis_km": round(minor_axis_km, 1),
+        "orientation_deg": int(round(angle_deg)),
+        "area_hull_km2": round(area_hull_km2, 1),
+    }
+
 # ============================================================================ #
 # 1. Funciones auxiliares de carga y procesamiento (Cacheables con Streamlit)
 # ============================================================================ #
 
-@st.cache_data(ttl=3600) # Cachea los resultados por 1 hora
-def get_glm_files_for_window(_fs, start_time, minutes=5):
+@st.cache_data(ttl=3600)
+def detect_goes_bucket(_fs, target_time):
+    """
+    Verifica si los datos de la fecha/hora existen en 'noaa-goes16'.
+    Si no encuentra archivos o el directorio está vacío, conmuta a 'noaa-goes19'.
+    """
+    year = target_time.strftime("%Y")
+    day_of_year = target_time.strftime("%j")
+    hour = target_time.strftime("%H")
+
+    # Carpeta testigo de GLM en GOES-16
+    folder_g16 = f"noaa-goes16/GLM-L2-LCFA/{year}/{day_of_year}/{hour}/"
+    try:
+        sample_files = _fs.ls(folder_g16)
+        if len(sample_files) > 0:
+            return "noaa-goes16"
+    except Exception:
+        pass
+
+    # Si falló o no hay archivos, conmuta a GOES-19
+    return "noaa-goes19"
+
+@st.cache_data(ttl=3600)
+def get_glm_files_for_window(_fs, start_time, bucket_name, minutes=5):
     all_files = []
     num_steps = (minutes * 60) // 20
     for i in range(num_steps):
         current_time = start_time + timedelta(seconds=i * 20)
         time_prefix = current_time.strftime("s%Y%j%H%M%S")
-        folder_path = f"noaa-goes19/GLM-L2-LCFA/{current_time.strftime('%Y/%j/%H/')}"
+        folder_path = f"{bucket_name}/GLM-L2-LCFA/{current_time.strftime('%Y/%j/%H/')}"
         try:
             matching_files = _fs.glob(f"{folder_path}*_{time_prefix}*")
             all_files.extend(matching_files)
-        except:
+        except Exception:
             continue
     return all_files
 
-@st.cache_data(ttl=3600) # Cachea los resultados por 1 hora
-def get_abi_c13_file(_fs, target_time):
+@st.cache_data(ttl=3600)
+def get_abi_c13_file(_fs, target_time, bucket_name):
     time_prefix = target_time.strftime("s%Y%j%H%M")
-    folder_path = f"noaa-goes19/ABI-L2-CMIPF/{target_time.strftime('%Y/%j/%H/')}"
+    folder_path = f"{bucket_name}/ABI-L2-CMIPF/{target_time.strftime('%Y/%j/%H/')}"
     files = _fs.glob(f"{folder_path}*C13_*_{time_prefix}*")
     return files[0] if files else None
 
 @st.cache_data(ttl=3600)
-def get_abi_ctp_file(_fs, target_time):
+def get_abi_ctp_file(_fs, target_time, bucket_name):
     time_prefix = target_time.strftime("s%Y%j%H%M")
-    folder_path = f"noaa-goes19/ABI-L2-CTPF/{target_time.strftime('%Y/%j/%H/')}"
+    folder_path = f"{bucket_name}/ABI-L2-CTPF/{target_time.strftime('%Y/%j/%H/')}"
     files = _fs.glob(f"{folder_path}*CTPF*_{time_prefix}*")
     return files[0] if files else None
+
+# @st.cache_data(ttl=3600) # Cachea los resultados por 1 hora
+# def get_glm_files_for_window(_fs, start_time, minutes=5):
+#     all_files = []
+#     num_steps = (minutes * 60) // 20
+#     for i in range(num_steps):
+#         current_time = start_time + timedelta(seconds=i * 20)
+#         time_prefix = current_time.strftime("s%Y%j%H%M%S")
+#         folder_path = f"noaa-goes19/GLM-L2-LCFA/{current_time.strftime('%Y/%j/%H/')}"
+#         try:
+#             matching_files = _fs.glob(f"{folder_path}*_{time_prefix}*")
+#             all_files.extend(matching_files)
+#         except:
+#             continue
+#     return all_files
+
+# @st.cache_data(ttl=3600) # Cachea los resultados por 1 hora
+# def get_abi_c13_file(_fs, target_time):
+#     time_prefix = target_time.strftime("s%Y%j%H%M")
+#     folder_path = f"noaa-goes19/ABI-L2-CMIPF/{target_time.strftime('%Y/%j/%H/')}"
+#     files = _fs.glob(f"{folder_path}*C13_*_{time_prefix}*")
+#     return files[0] if files else None
+
+# @st.cache_data(ttl=3600)
+# def get_abi_ctp_file(_fs, target_time):
+#     time_prefix = target_time.strftime("s%Y%j%H%M")
+#     folder_path = f"noaa-goes19/ABI-L2-CTPF/{target_time.strftime('%Y/%j/%H/')}"
+#     files = _fs.glob(f"{folder_path}*CTPF*_{time_prefix}*")
+#     return files[0] if files else None
 
 @st.cache_data
 def cluster_and_get_polygons(reflectivity_data, threshold_dbz, lon_mesh, lat_mesh, min_area_km2=100):
@@ -174,65 +284,6 @@ def load_airport_data(path_csv):
         st.error(f"Error cargando datos de aeropuertos {path_csv}: {e}")
         return pd.DataFrame()
 
-def compute_sigmet_convex_hull_properties(poly, simplify_deg=0.08):
-    """
-    Calcula el Convex Hull simplificado y sus propiedades morfológicas
-    (eje mayor, eje menor, orientación y área) en unidades físicas (km).
-    """
-    # 1. Envoltura Convexa
-    hull = poly.convex_hull
-
-    # 2. Reducir cantidad de vértices para formato SIGMET (Ramer-Douglas-Peucker)
-    # tolerance en grados: ~0.05° a 0.1° (~6 a 11 km de tolerancia)
-    hull_simplified = hull.simplify(tolerance=simplify_deg, preserve_topology=True)
-    if not hull_simplified.is_valid or hull_simplified.geom_type != "Polygon":
-        hull_simplified = hull
-
-    # 3. Factor de conversión métrica local (geodésico aproximado)
-    centroid_lat = hull_simplified.centroid.y
-    lat_rad = np.radians(centroid_lat)
-    km_per_deg_lat = 111.32
-    km_per_deg_lon = 111.32 * np.cos(lat_rad)
-
-    # 4. Rectángulo Mínimo Orientado (Oriented Bounding Box)
-    # Da las dimensiones principales exactas de la envoltura
-    min_rect = hull_simplified.minimum_rotated_rectangle
-    rect_coords = list(min_rect.exterior.coords)[:-1]
-
-    # Distancias entre lados consecutivos en km
-    lados_km = []
-    vectores = []
-    for k in range(4):
-        p1 = rect_coords[k]
-        p2 = rect_coords[(k + 1) % 4]
-        dx_km = (p2[0] - p1[0]) * km_per_deg_lon
-        dy_km = (p2[1] - p1[1]) * km_per_deg_lat
-        dist_km = np.hypot(dx_km, dy_km)
-        lados_km.append(dist_km)
-        vectores.append((dx_km, dy_km))
-
-    # Identificar eje mayor y eje menor
-    idx_major = int(np.argmax(lados_km[:2]))
-    major_axis_km = max(lados_km[0], lados_km[1])
-    minor_axis_km = min(lados_km[0], lados_km[1])
-
-    # 5. Orientación respecto al Norte (Ángulo azimutal de 0° a 180°)
-    dx_maj, dy_maj = vectores[idx_major]
-    # np.arctan2(dx, dy) mide el ángulo partiendo del Norte (+Y) hacia el Este (+X)
-    angle_deg = np.degrees(np.arctan2(dx_maj, dy_maj)) % 180.0
-
-    # 6. Área del Convex Hull en km²
-    area_hull_km2 = hull_simplified.area * km_per_deg_lon * km_per_deg_lat
-
-    return {
-        "hull_polygon": hull_simplified,
-        "vertices": len(list(hull_simplified.exterior.coords)) - 1,
-        "major_axis_km": round(major_axis_km, 1),
-        "minor_axis_km": round(minor_axis_km, 1),
-        "orientation_deg": int(round(angle_deg)),
-        "area_hull_km2": round(area_hull_km2, 1),
-    }
-
 @st.cache_data(ttl=3600) 
 def load_and_process_data(start_window_datetime, _fs_param):
     
@@ -262,11 +313,15 @@ def load_and_process_data(start_window_datetime, _fs_param):
     fir_resistencia = load_shape_features(path_fir_resistencia_rel)
     fir_mendoza     = load_shape_features(path_fir_mendoza_rel)
     fir_comodoro    = load_shape_features(path_fir_comodoro_rel)
+    
+    # --- Detección automática del satélite (GOES-16 vs GOES-19) ---
+    bucket_name = detect_goes_bucket(_fs_param, start_window_datetime)
+    sat_label = "GOES-16" if "16" in bucket_name else "GOES-19"
 
     # --- Carga y preprocesamiento de datos GLM y ABI ---
-    glm_files = get_glm_files_for_window(_fs_param, start_window_datetime, minutes=5)
-    abi_file  = get_abi_c13_file(_fs_param, start_window_datetime)
-    ctp_file  = get_abi_ctp_file(_fs_param, start_window_datetime)
+    glm_files = get_glm_files_for_window(_fs_param, start_window_datetime, bucket_name=bucket_name, minutes=5)
+    abi_file  = get_abi_c13_file(_fs_param, start_window_datetime, bucket_name=bucket_name)
+    ctp_file  = get_abi_ctp_file(_fs_param, start_window_datetime, bucket_name=bucket_name)
 
     if not glm_files:
         st.warning(f"No se encontraron archivos GLM para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
@@ -486,7 +541,8 @@ def load_and_process_data(start_window_datetime, _fs_param):
     metrics_df = pd.DataFrame(metrics_list)
 
     return {
-        		"warning_polygons": warning_polygons,
+        		"sat_label": sat_label,
+            "warning_polygons": warning_polygons,
         		"metrics_df": metrics_df,
         		"ir_data": ir_data,
         		"x": x,
