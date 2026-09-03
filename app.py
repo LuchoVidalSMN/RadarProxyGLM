@@ -825,8 +825,6 @@ else:
             arrow_symbol = rumbo_to_arrow(int(poly_data.Rumbo.replace("°", "")))
             mc7.metric("Orientación / Rumbo", f"{poly_data.Rumbo}", delta=arrow_symbol)  # delta muestra la flecha y dirección
 
-            st.caption(f"**Estructura:** {poly_data.Tipo_Desc} | **Relación de aspecto:** {poly_data.Aspect_Ratio:.1f}:1")
-
         st.dataframe(metrics_df, height=600, hide_index=True)
 
         if not metrics_df.empty:
