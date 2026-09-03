@@ -780,7 +780,7 @@ else:
     if not metrics_df.empty:
         metrics_df = metrics_df.sort_values(by='Area', ascending=False).reset_index(drop=True)
 
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([3, 2])
 
     with col2:
         st.header(":blue[Tabla de Advertencias]")
@@ -806,7 +806,7 @@ else:
             mc1.metric("Tope (FL)", f"FL{int(poly_data.MaxFL):03d}")
             mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
             mc3.metric("Área Envolvente", f"{poly_data.Area:.0f} km²")
-            mc4.metric("Clasificación", f"{poly_data.Tipo}", help=poly_data.Tipo_Desc)
+            mc4.metric("Clasificación", f"{poly_data.Tipo}", help=poly_data.Descripcion)
 
             mc5, mc6, mc7 = st.columns(3)
             mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
