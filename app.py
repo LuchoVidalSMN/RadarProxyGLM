@@ -780,7 +780,7 @@ else:
     if not metrics_df.empty:
         metrics_df = metrics_df.sort_values(by='Area', ascending=False).reset_index(drop=True)
 
-    col1, col2 = st.columns([3, 2])
+    col1, col2 = st.columns([1, 1])
 
     with col2:
         st.header(":blue[Tabla de Advertencias]")
@@ -812,7 +812,7 @@ else:
             mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
             mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")         
             arrow_symbol = rumbo_to_arrow(int(poly_data.Orientacion.replace("°", "")))
-            mc7.metric("Orientación", f"{poly_data.Rumbo}", delta=arrow_symbol)  # delta muestra la flecha y dirección
+            mc7.metric("Orientación", f"{poly_data.Orientacion}", delta=arrow_symbol)  # delta muestra la flecha y dirección
         
         st.dataframe(
                      metrics_df,
