@@ -14,8 +14,7 @@ import cartopy.feature as cfeature
 from cartopy.io.shapereader import Reader
 from cartopy.feature import ShapelyFeature
 
-from shapely.geometry import Point # Para calcular métricas
-from shapely.geometry import Polygon # Asegúrate de tener shapely instalado
+from shapely.geometry import Point, Polygon, box
 
 from scipy.ndimage import gaussian_filter, label
 from matplotlib.colors import ListedColormap, BoundaryNorm
@@ -23,34 +22,44 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 from skimage.measure import find_contours
 
 # ============================================================================ #
-
-path_shape_depto = './data/shp_arg/operativo/departamentos_edit.shp'
-path_shape_prov = './data/shp_arg/operativo/provincias_edit.shp'
-path_shape_paises = './data/shp_arg/cartopy/10m_admin_0_countries.shp'
-path_dir_FIR = './data/fir_txt/'
-path_fir_ezeiza = './data/shp_arg/FIR/FIR_EZEIZA_backup.shp'
-path_fir_cordoba = './data/shp_arg/FIR/FIR_CORDOBA.shp'
-path_fir_resistencia = './data/shp_arg/FIR/FIR_RESISTENCIA.shp'
-path_fir_mendoza = './data/shp_arg/FIR/FIR_MENDOZA.shp'
-path_fir_comodoro = './data/shp_arg/FIR/FIR_COMODORO.shp'
-
-# ============================================================================ #
 # 0. Definiciones globales o constantes (fuera de funciones para Streamlit)
 # ============================================================================ #
 
 # Paleta de colores para radar real
 aviation_colors = [
-    "#00FF00",  # Verde  (Level 1: 20-30 dBZ) - Débil
-    "#FFFF00",  # Amarillo (Level 2: 30-40 dBZ) - Moderado
-    "#FF0000",  # Rojo   (Level 3: 40-50 dBZ) - Fuerte
-    "#FF00FF",  # Magenta (Level 4: > 50 dBZ)  - Extremo / Granizo / Turbulencia
-]
+		   "#00FF00",  # Verde    (Level 1: 20-30 dBZ) | Débil
+		   "#FFFF00",  # Amarillo (Level 2: 30-40 dBZ) | Moderado
+		   "#FF0000",  # Rojo     (Level 3: 40-50 dBZ) | Fuerte
+		   "#FF00FF",  # Magenta  (Level 4: > 50 dBZ)  | Extremo
+                  ]
 cmap_aviation = ListedColormap(aviation_colors)
 levels_aviation = [20, 30, 40, 50, 65]
 norm_aviation = BoundaryNorm(levels_aviation, cmap_aviation.N)
 
 # Inicializar S3FileSystem una vez globalmente
 fs_global = s3fs.S3FileSystem(anon=True)
+
+# Calcula nivel de vuelo (FL) a partir del valor minimo de presión del tope nuboso
+def pressure_to_flight_level(p_hpa):
+    """Convierte presión (hPa) a Nivel de Vuelo (FL) según la atmósfera estándar ISA"""
+    if p_hpa <= 0 or np.isnan(p_hpa) or np.ma.is_masked(p_hpa):
+        return np.nan
+    
+    # Troposfera (hasta ~36,000 pies / 226.32 hPa)
+    if p_hpa > 226.32:
+        alt_ft = 145366.45 * (1 - (p_hpa / 1013.25)**0.190284)
+    # Tropopausa / Baja Estratosfera (por encima de ~36,000 pies)
+    else:
+        alt_ft = 36089.24 - 20805.7 * np.log(p_hpa / 226.32)
+        
+    # El Nivel de Vuelo (FL) exacto (ej. 382.4)
+    fl_exact = alt_ft / 100.0
+    
+    # Convención aeronáutica: Redondear a la decena más cercana (múltiplos de 10)
+    # Ej: 382.4 -> 38.24 -> round(38) -> 38 * 10 -> 380
+    fl_rounded = int(round(fl_exact / 10.0) * 10)
+    
+    return fl_rounded
 
 # ============================================================================ #
 # 1. Funciones auxiliares de carga y procesamiento (Cacheables con Streamlit)
@@ -78,8 +87,16 @@ def get_abi_c13_file(_fs, target_time):
     files = _fs.glob(f"{folder_path}*C13_*_{time_prefix}*")
     return files[0] if files else None
 
+@st.cache_data(ttl=3600)
+def get_abi_ctp_file(_fs, target_time):
+    time_prefix = target_time.strftime("s%Y%j%H%M")
+    folder_path = f"noaa-goes19/ABI-L2-CTPF/{target_time.strftime('%Y/%j/%H/')}"
+    files = _fs.glob(f"{folder_path}*CTPF*_{time_prefix}*")
+    return files[0] if files else None
+
 @st.cache_data
-def cluster_and_get_polygons(reflectivity_data, threshold_dbz, lon_mesh, lat_mesh):
+def cluster_and_get_polygons(reflectivity_data, threshold_dbz, lon_mesh, lat_mesh, min_area_km2=100):
+
     thresholded_data = reflectivity_data >= threshold_dbz
     labeled_array, num_features = label(thresholded_data)
 
@@ -101,13 +118,27 @@ def cluster_and_get_polygons(reflectivity_data, threshold_dbz, lon_mesh, lat_mes
             if lon_coords.size > 0 and (lon_coords[0] != lon_coords[-1] or lat_coords[0] != lat_coords[-1]):
                 lon_coords = np.append(lon_coords, lon_coords[0])
                 lat_coords = np.append(lat_coords, lat_coords[0])
-
+                
             if len(lon_coords) > 2:
                 poly_coords = list(zip(lon_coords, lat_coords))
+                
                 try:
                     poly = Polygon(poly_coords)
-                    if not poly.is_empty and poly.is_valid:
-                        polygons.append(poly)
+                    
+                    # Reparar polígonos inválidos
+                    if not poly.is_valid:
+                        poly = poly.buffer(0)
+                        
+                    if not poly.is_empty:
+                        # Calcular el área directamente con la geometría de Shapely
+                        # poly.area devuelve grados cuadrados. Lo pasamos a km2 usando el centroide:
+                        lat_rad = np.radians(poly.centroid.y)
+                        area_geom_km2 = poly.area * 111.32 * (111.32 * np.cos(lat_rad))
+                        
+                        # Guardar solo si supera el umbral de área
+                        if area_geom_km2 >= min_area_km2:
+                            polygons.append(poly)
+                            
                 except Exception as e:
                     st.warning(f"Error creando Polígono del contorno: {e}")
 
@@ -135,42 +166,50 @@ def load_airport_data(path_csv):
 @st.cache_data(ttl=3600) 
 def load_and_process_data(start_window_datetime, _fs_param):
     
-    # Límites espaciales (movidos arriba para usarlos en la lectura)
-    lat_min, lat_max = -45.0, -19.0
-    lon_min, lon_max = -75.0, -50.0
+    # --- Límites espaciales para lectura de datos (NOTA: no son los mismo limites que para la visualizacion) ---
+    lat_min, lat_max = -47.0, -18.5
+    lon_min, lon_max = -75.5, -37.0
+    
+    # --- Limites para filtrar polígonos fuera del área de visualización ---
+    lat_min_plot, lat_max_plot = -45.0, -19.0
+    lon_min_plot, lon_max_plot = -75.0, -50.0
 
     # --- RUTAS RELATIVAS A LOS ARCHIVOS DE DATOS EN TU REPOSITORIO GITHUB ---
-    path_shape_depto_rel = './data/shp_arg/operativo/departamentos_edit.shp'
-    path_shape_prov_rel = './data/shp_arg/operativo/provincias_edit.shp'
-    path_shape_paises_rel = './data/shp_arg/cartopy/10m_admin_0_countries.shp'
-    path_dir_FIR_rel = './data/fir_txt/FIR_aeropuertos.txt' 
-    path_fir_ezeiza_rel = './data/shp_arg/FIR/FIR_EZEIZA_backup.shp'
-    path_fir_cordoba_rel = './data/shp_arg/FIR/FIR_CORDOBA.shp'
+    path_shape_depto_rel     = './data/shp_arg/operativo/departamentos_edit.shp'
+    path_shape_prov_rel      = './data/shp_arg/operativo/provincias_edit.shp'
+    path_shape_paises_rel    = './data/shp_arg/cartopy/10m_admin_0_countries.shp'
+    path_dir_FIR_rel         = './data/fir_txt/FIR_aeropuertos.txt' 
+    path_fir_ezeiza_rel      = './data/shp_arg/FIR/FIR_EZEIZA_backup.shp'
+    path_fir_cordoba_rel     = './data/shp_arg/FIR/FIR_CORDOBA.shp'
     path_fir_resistencia_rel = './data/shp_arg/FIR/FIR_RESISTENCIA.shp'
-    path_fir_mendoza_rel = './data/shp_arg/FIR/FIR_MENDOZA.shp'
-    path_fir_comodoro_rel = './data/shp_arg/FIR/FIR_COMODORO.shp'
+    path_fir_mendoza_rel     = './data/shp_arg/FIR/FIR_MENDOZA.shp'
+    path_fir_comodoro_rel    = './data/shp_arg/FIR/FIR_COMODORO.shp'
 
-    paises = load_shape_features(path_shape_paises_rel)
-    df_airports = load_airport_data(path_dir_FIR_rel)
-    fir_ezeiza = load_shape_features(path_fir_ezeiza_rel)
-    fir_cordoba = load_shape_features(path_fir_cordoba_rel)
+    paises          = load_shape_features(path_shape_paises_rel)
+    df_airports     = load_airport_data(path_dir_FIR_rel)
+    fir_ezeiza      = load_shape_features(path_fir_ezeiza_rel)
+    fir_cordoba     = load_shape_features(path_fir_cordoba_rel)
     fir_resistencia = load_shape_features(path_fir_resistencia_rel)
-    fir_mendoza = load_shape_features(path_fir_mendoza_rel)
-    fir_comodoro = load_shape_features(path_fir_comodoro_rel)
+    fir_mendoza     = load_shape_features(path_fir_mendoza_rel)
+    fir_comodoro    = load_shape_features(path_fir_comodoro_rel)
 
     # --- Carga y preprocesamiento de datos GLM y ABI ---
     # Reducimos los minutos a 3 para ahorrar memoria
     glm_files = get_glm_files_for_window(_fs_param, start_window_datetime, minutes=5)
-    abi_file = get_abi_c13_file(_fs_param, start_window_datetime)
+    abi_file  = get_abi_c13_file(_fs_param, start_window_datetime)
+    ctp_file  = get_abi_ctp_file(_fs_param, start_window_datetime)
 
     if not glm_files:
         st.warning(f"No se encontraron archivos GLM para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
         return None 
     if abi_file is None:
-        st.warning(f"No se encontró archivo ABI C13 para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
+        st.warning(f"No se encontró archivo ABI-C13 para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
+        return None
+    if ctp_file is None:
+        st.warning(f"No se encontró archivo ABI-CTP para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
         return None 
 
-    # Leer y recortar GLM al vuelo
+    # --- Leer y recortar GLM al vuelo ---
     accumulated_lats = []
     accumulated_lons = []
     for file_path in glm_files:
@@ -186,17 +225,15 @@ def load_and_process_data(start_window_datetime, _fs_param):
     all_lats = np.array(accumulated_lats)
     all_lons = np.array(accumulated_lons)
 
-    # Leer y recortar ABI al vuelo
+    # --- Leer y recortar ABI al vuelo (resolucione espacial de 2 km) ---
     with _fs_param.open(abi_file, "rb") as f:
         with Dataset("dummy", mode="r", memory=f.read()) as nc:
             proj_info = nc.variables["goes_imager_projection"]
             h = proj_info.perspective_point_height
-            
             x_rad = nc.variables["x"][:]
             y_rad = nc.variables["y"][:]
             x_full = x_rad * h
             y_full = y_rad * h
-            
             abi_crs = ccrs.Geostationary(central_longitude=proj_info.longitude_of_projection_origin, satellite_height=h)
             
             # Transformar límites a proyección geoestacionaria
@@ -219,26 +256,57 @@ def load_and_process_data(start_window_datetime, _fs_param):
                 y = y_full[y_start:y_end]
             else:
                 ir_data, x, y = None, None, None
+          
+    # --- Leer y recortar ACTPF usando sus propias coordenadas pues la resolucion espacial es de 10 km ---
+    ctp_data, x_ctp, y_ctp = None, None, None
+    if ctp_file is not None and len(idx_x) > 0 and len(idx_y) > 0:
+        try:
+            with _fs_param.open(ctp_file, "rb") as f:
+                with Dataset("dummy_ctp", mode="r", memory=f.read()) as nc_ctp:
+                    # Extraer resolución de proyección específica del CTPF
+                    h_ctp = nc_ctp.variables["goes_imager_projection"].perspective_point_height
+                    x_full_ctp = nc_ctp.variables["x"][:] * h_ctp
+                    y_full_ctp = nc_ctp.variables["y"][:] * h_ctp
+                    
+                    # Buscar índices en la grilla del CTPF
+                    idx_x_act = np.where((x_full_ctp >= x_min_proj) & (x_full_ctp <= x_max_proj))[0]
+                    idx_y_act = np.where((y_full_ctp >= y_min_proj) & (y_full_ctp <= y_max_proj))[0]
+                    
+                    if len(idx_x_act) > 0 and len(idx_y_act) > 0:
+                        xs_a, xe_a = idx_x_act[0], idx_x_act[-1] + 1
+                        ys_a, ye_a = idx_y_act[0], idx_y_act[-1] + 1
+                        
+                        ctp_data = nc_ctp.variables["PRES"][ys_a:ye_a, xs_a:xe_a]
+                        x_ctp = x_full_ctp[xs_a:xe_a]
+                        y_ctp = y_full_ctp[ys_a:ye_a]
+        except Exception as e:
+            st.warning(f"No se pudo procesar CTP: {e}")
 
     grid_res_high = 0.05
     lat_bins_high = np.arange(lat_min, lat_max + grid_res_high, grid_res_high)
     lon_bins_high = np.arange(lon_min, lon_max + grid_res_high, grid_res_high)
 
     fed_high, _, _ = np.histogram2d(all_lats, all_lons, bins=[lat_bins_high, lon_bins_high])
-    fed_smoothed = gaussian_filter(fed_high, sigma=1.5)
+    fed_smoothed   = gaussian_filter(fed_high, sigma=1.5)
 
     max_reflectivity_proxy = np.zeros_like(fed_smoothed)
     mask = fed_smoothed > 0.1
     max_reflectivity_proxy[mask] = 33.0 + 10.0 * np.log10(fed_smoothed[mask])
 
     lon_mesh_high, lat_mesh_high = np.meshgrid(
-        (lon_bins_high[:-1] + lon_bins_high[1:]) / 2,
-        (lat_bins_high[:-1] + lat_bins_high[1:]) / 2
-    )
+						(lon_bins_high[:-1] + lon_bins_high[1:]) / 2,
+						(lat_bins_high[:-1] + lat_bins_high[1:]) / 2
+					      )
 
     # --- Detección de Polígonos de Advertencia y Métricas ---
-    warning_threshold_dbz = 30
+    warning_threshold_dbz = 25
     warning_polygons = cluster_and_get_polygons(max_reflectivity_proxy, warning_threshold_dbz, lon_mesh_high, lat_mesh_high)
+
+    # --- Crear un bounding box con los límites del mapa ---
+    plot_bbox = box(lon_min_plot, lat_min_plot, lon_max_plot, lat_max_plot)
+    
+    # --- Conservar solo los polígonos que intersectan con el área visible ---
+    warning_polygons = [poly for poly in warning_polygons if poly.intersects(plot_bbox)]
 
     metrics_list = []
     if warning_polygons and ir_data is not None:
@@ -254,6 +322,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
             reflectivity_values_in_poly = []
             ir_temps_in_poly = []
             fed_values_in_poly = []
+            ctp_values_in_poly = []
             num_pixels = 0
 
             for i_flat in range(len(grid_points)):
@@ -269,64 +338,102 @@ def load_and_process_data(start_window_datetime, _fs_param):
                     idx_x_abi = np.argmin(np.abs(x - x_transformed))
                     idx_y_abi = np.argmin(np.abs(y - y_transformed))
                     ir_temps_in_poly.append(ir_data[idx_y_abi, idx_x_abi])
+                    
+                    # Guardar valores de presión usando la grilla de CTPF
+                    if ctp_data is not None and x_ctp is not None and y_ctp is not None:
+                        # Buscar los índices correspondientes en la grilla de presión
+                        idx_x_act = np.argmin(np.abs(x_ctp - x_transformed))
+                        idx_y_act = np.argmin(np.abs(y_ctp - y_transformed))
+                        
+                        val_pres = ctp_data[idx_y_act, idx_x_act]
+                        if not np.ma.is_masked(val_pres) and not np.isnan(val_pres):
+                            ctp_values_in_poly.append(val_pres)
 
             max_reflectivity = np.max(reflectivity_values_in_poly) if reflectivity_values_in_poly else np.nan
             max_fed = np.max(fed_values_in_poly) if fed_values_in_poly else np.nan
             min_ir_temp = np.min(ir_temps_in_poly) if ir_temps_in_poly else np.nan
+                       
+            # Convertir píxeles a km2
+            # 1 grado geográfico = ~111.32 km
+            lat_rad = np.radians(centroid_lat)
+            alto_pixel_km = 0.05 * 111.32
+            ancho_pixel_km = 0.05 * 111.32 * np.cos(lat_rad)
+            area_por_pixel_km2 = alto_pixel_km * ancho_pixel_km
+            area_total_km2 = num_pixels * area_por_pixel_km2
+
+            # --- Clasificación por escala de impacto ---
+            if area_total_km2 < 500:
+                categoria = "CO"
+            elif area_total_km2 < 1000:
+                categoria = "MC"
+            else:
+                categoria = "SC"
+            # -------------------------------------------
+            
+            min_ctp  = np.min(ctp_values_in_poly) if ctp_values_in_poly else np.nan
+            # Convertir las presiones a Flight Level (FL)
+            max_fl  = pressure_to_flight_level(min_ctp)
 
             metrics_list.append({
-                'ID': poly_id,
-                'CenLon': centroid_lon,
-                'CenLat': centroid_lat,
-                'Pixels': num_pixels,
-                'MaxRef': max_reflectivity,
-                'MaxFED': max_fed,
-                'MinIR': min_ir_temp
-            })
+				 'ID': poly_id,
+				 'CenLon': centroid_lon,
+				 'CenLat': centroid_lat,
+				 #'Pixels': num_pixels,
+				 'Area': area_total_km2,
+				 'Escala': categoria,
+				 'MaxRef': round(max_reflectivity,1),
+				 'MaxFED': round(max_fed,1),
+				 'MinCTT': round(min_ir_temp,1),
+				 'MaxFL': max_fl,
+			        })
 
     metrics_df = pd.DataFrame(metrics_list)
 
     return {
-        "warning_polygons": warning_polygons,
-        "metrics_df": metrics_df,
-        "ir_data": ir_data,
-        "x": x,
-        "y": y,
-        "abi_crs": abi_crs,
-        "max_reflectivity_proxy": max_reflectivity_proxy,
-        "lon_mesh_high": lon_mesh_high,
-        "lat_mesh_high": lat_mesh_high,
-        "lon_min": lon_min,
-        "lon_max": lon_max,
-        "lat_min": lat_min,
-        "lat_max": lat_max,
-        "paises": paises,
-        "fir_ezeiza": fir_ezeiza,
-        "fir_cordoba": fir_cordoba,
-        "fir_resistencia": fir_resistencia,
-        "fir_mendoza": fir_mendoza,
-        "fir_comodoro": fir_comodoro,
-        "df_airports": df_airports,
-        "start_window": start_window_datetime
-    }
+		"warning_polygons": warning_polygons,
+		"metrics_df": metrics_df,
+		"ir_data": ir_data,
+		"x": x,
+		"y": y,
+		"abi_crs": abi_crs,
+		"max_reflectivity_proxy": max_reflectivity_proxy,
+		"lon_mesh_high": lon_mesh_high,
+		"lat_mesh_high": lat_mesh_high,
+		"lon_min": lon_min,
+		"lon_max": lon_max,
+		"lat_min": lat_min,
+		"lat_max": lat_max,
+		"paises": paises,
+		"fir_ezeiza": fir_ezeiza,
+		"fir_cordoba": fir_cordoba,
+		"fir_resistencia": fir_resistencia,
+		"fir_mendoza": fir_mendoza,
+		"fir_comodoro": fir_comodoro,
+		"df_airports": df_airports,
+		"start_window": start_window_datetime
+          }
 
 # ============================================================================ #
 # 2. Función para dibujar el mapa                                             #
 # ============================================================================ #
 
 def plot_interactive_map_streamlit(
-    warning_polygons, metrics_df, ir_data, x, y, abi_crs,
-    max_reflectivity_proxy, lon_mesh_high, lat_mesh_high,
-    lon_min, lon_max, lat_min, lat_max,
-    paises, fir_ezeiza, fir_cordoba, fir_resistencia, fir_mendoza, fir_comodoro,
-    df_airports, start_window,
-    highlight_poly_id=None
-):
+				    warning_polygons, metrics_df, ir_data, x, y, abi_crs,
+				    max_reflectivity_proxy, lon_mesh_high, lat_mesh_high,
+				    lon_min, lon_max, lat_min, lat_max,
+				    paises, fir_ezeiza, fir_cordoba, fir_resistencia, fir_mendoza, fir_comodoro,
+				    df_airports, start_window,
+				    highlight_poly_id=None
+				  ):
+				  
     fig = plt.figure(figsize=(12, 12))
     ax = fig.add_subplot(111, projection=ccrs.Mercator())
 
-    ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
-
+    # Límites espaciales para visualización
+    lat_min_plot, lat_max_plot = -45.0, -19.0
+    lon_min_plot, lon_max_plot = -75.0, -50.0
+    ax.set_extent([lon_min_plot, lon_max_plot, lat_min_plot, lat_max_plot], crs=ccrs.PlateCarree())
+    
     if ir_data is not None:
         im_ir = ax.imshow(
             ir_data, origin="upper",
@@ -349,51 +456,76 @@ def plot_interactive_map_streamlit(
     if fir_resistencia is not None: ax.add_feature(fir_resistencia, facecolor='None', edgecolor='blue', linewidth=1.5, zorder=2)
     if fir_mendoza is not None: ax.add_feature(fir_mendoza, facecolor='None', edgecolor='blue', linewidth=1.5, zorder=2)
     if fir_comodoro is not None: ax.add_feature(fir_comodoro, facecolor='None', edgecolor='blue', linewidth=1.5, zorder=2)
-
+               
     if not df_airports.empty:
         for i, type_code in enumerate(df_airports['Codigo ICAO'].values):
             px = df_airports['Lon'].values[i]
             py = df_airports['Lat'].values[i]
-            if (lon_min < px < lon_max) and (lat_min < py < lat_max):
+            if (lon_min_plot < px < lon_max_plot) and (lat_min_plot < py < lat_max_plot):
                 plt.scatter(px, py, marker='s', s=10, color='b', zorder=5, transform=ccrs.PlateCarree())
                 plt.text(px + 0.15, py - 0.21, type_code, fontsize=8, c='b', clip_on=True, zorder=5, transform=ccrs.PlateCarree())
 
     cbar_proxy = plt.colorbar(
-        im_proxy, ax=ax, orientation="horizontal", pad=0.01, shrink=0.65,
-        ticks=[25, 35, 45, 57.5]
-    )
-    cbar_proxy.ax.set_xticklabels(["Leve", "Moderado", "Fuerte", "Intenso / Extremo"], fontsize=11)
+			      im_proxy, ax=ax, orientation="horizontal", pad=0.01, shrink=0.65,
+			      ticks=[25, 35, 45, 57.5]
+		             )
+    cbar_proxy.ax.set_xticklabels(["Leve", "Moderado", "Fuerte", "Extremo"], fontsize=11)
     cbar_proxy.ax.tick_params(axis='x', length=0)
 
     for poly_idx, poly in enumerate(warning_polygons):
+    
         current_id = poly_idx + 1
-        edge_color = 'cyan'
-        line_width = 2
+        edge_color = 'none'
+        line_width = 0
 
         if highlight_poly_id == current_id:
             edge_color = 'red'
-            line_width = 4
+            line_width = 2
             zorder = 7
         else:
             zorder = 6
 
         ax.add_geometries([poly], ccrs.PlateCarree(),
                           facecolor='none', edgecolor=edge_color, linewidth=line_width, linestyle='-', zorder=zorder)
+                          
+        # Cambiamos [poly] por [poly.envelope] para dibujar el rectángulo
+        #ax.add_geometries([poly.envelope], ccrs.PlateCarree(),
+        #                  facecolor='none', edgecolor=edge_color, linewidth=line_width, linestyle='-', zorder=zorder)
 
     #plt.title(
     #    f"GOES-19 Canal 13 IR + Proxy radar GLM 5-min\n"
     #    f"{start_window.strftime('%Y-%m-%d %H:%M UTC')}", fontsize=12
     #)
+    
     plt.tight_layout()
     return fig
 
 # ============================================================================ #
-# 3. Estructura de la aplicación Streamlit (Main App Logic)                  #
+# 3. Estructura de la aplicación Streamlit (Main App Logic)
 # ============================================================================ #
 
 st.set_page_config(layout="wide")
 st.image("smn_horizontal_arg-01.jpg", width=250) 
 st.title("Producto TS-SIGMET | Dashboard Interactivo ")
+
+# --- Glosario expansible de referencias ---
+with st.expander("⚠️ **Referencia de tipo de tormentas y seguridad operacional**"):
+    st.markdown("""
+    Esta clasificación categoriza las tormentas según su extensión espacial y su impacto esperado en la gestión del tránsito aéreo:
+
+    *   **CELDA ORDINARIA (CO): 100 a 500 km²**
+        *   **Estructura:** Tormentas individuales o pulsos convectivos de escala local.
+        *   **Impacto operacional:** Obligan a desvíos tácticos cortos. Generalmente, la tripulación puede evadirlas utilizando el radar meteorológico de a bordo y el contacto visual, solicitando alteraciones menores de rumbo al ATC.
+    
+    *   **MULTICELULAR (MC): 500 a 1000 km²**
+        *   **Estructura:** Clústeres o agrupaciones de celdas convectivas que interactúan entre sí.
+        *   **Impacto operacional:** Bloquean tramos considerables de aerovías. Requieren ruteos alternativos planificados que aumentan el consumo de combustible y exigen coordinación anticipada con el Control de Tráfico Aéreo.
+    
+    *   **SISTEMA CONVECTIVO (SC): > 1000 km²**
+        *   **Estructura:** Sistemas Convectivos de Mesoescala (MCS), Complejos Convectivos (MCC) o Líneas de Inestabilidad (Squall Lines).
+        *   **Impacto operacional:** Disrupción severa del espacio aéreo. Tienen el potencial de bloquear Regiones de Información de Vuelo (FIR) completas, forzando desvíos estratégicos masivos, demoras generalizadas o el cierre temporal de rutas.
+    """)
+# -------------------------------------------------
 
 initial_datetime = datetime(2025, 11, 4, 3, 0, 0) 
 
@@ -410,38 +542,53 @@ else:
     warning_polygons = data["warning_polygons"]
     metrics_df = data["metrics_df"]
 
+    if not metrics_df.empty:
+        metrics_df = metrics_df.sort_values(by='Area', ascending=False).reset_index(drop=True)
+
     col1, col2 = st.columns([1, 1])
 
     with col2:
-        st.header("Métricas")
-        options = [f"ID: {int(row.ID)}, MaxdBZ: {row.MaxRef:.2f}, MaxFED: {row.MaxFED:.2f}"
-                   for idx, row in metrics_df.iterrows()]
+        st.header("Tabla de Advertencias por Tormenta")
+
+        options = [f"ID: {int(row.ID)}, Tipo: {row.Escala}, Tope: FL{int(row.MaxFL):03d}, Area: {int(row.Area)} km²"
+                   for idx, row in metrics_df.iterrows()]  
         options.insert(0, "-- Seleccionar Polígono --")
 
         selected_option = st.selectbox(
-            "Seleccionar un polígono para resaltar en el mapa:",
+            "Seleccionar una advertencia para resaltar en el mapa:",
             options,
             index=0
         )
-
+           
         highlight_poly_id = None
         if selected_option != "-- Seleccionar Polígono --":
             highlight_poly_id = int(float(selected_option.split(',')[0].replace('ID: ', '')))
+            
+            # --- Mostrar las métricas del polígono seleccionado ---
+            st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
+            poly_data = metrics_df[metrics_df['ID'] == highlight_poly_id].iloc[0]
+            
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            mc1.metric("Tope (FL)", f"FL{int(poly_data.MaxFL):03d}")
+            mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
+            mc3.metric("Área", f"{poly_data.Area:.0f} km²")
+            mc4.metric("Tipo", f"{poly_data.Escala}")
+            # -------------------------------------------------------------
 
-        st.dataframe(metrics_df, height=600)
+        st.dataframe(metrics_df, height=600, hide_index=True)
 
         if not metrics_df.empty:
             csv_buffer = io.StringIO()
             metrics_df.to_csv(csv_buffer, index=False)
             st.download_button(
-                label="Descargar Métricas como CSV",
+                label="Descargar métricas como CSV",
                 data=csv_buffer.getvalue(),
                 file_name="warning_polygons_metrics.csv",
                 mime="text/csv",
             )
 
     with col1:
-        st.header("Mapa de Polígonos de Advertencia")
+        st.header("Mapa de Advertencias por Tormenta")
         fig = plot_interactive_map_streamlit(
             warning_polygons, metrics_df,
             data["ir_data"], data["x"], data["y"], data["abi_crs"],
@@ -452,3 +599,6 @@ else:
             highlight_poly_id=highlight_poly_id
         )
         st.pyplot(fig)
+        
+# ============================================================================ #
+        

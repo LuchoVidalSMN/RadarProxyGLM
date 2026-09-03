@@ -1,4 +1,4 @@
-#!/home/lucho/SMN/RadarProxyGLM/venv/bin/python3
+#!/home/lucho/SMN/GOES/RadarProxyGLM/venv/bin/python
 
 import sys
 import json
