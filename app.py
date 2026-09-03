@@ -732,7 +732,7 @@ def plot_interactive_map_streamlit(
 
 st.set_page_config(layout="wide")
 st.image("smn_horizontal_arg-01.jpg", width=250) 
-st.title(":[blue](Producto TS-SIGMET | Dashboard Interactivo [EXPERIMENTAL])")
+st.title(":#242C4F[Producto TS-SIGMET | Dashboard Interactivo (EXPERIMENTAL)]")
 
 # --- Glosario expansible de referencias ---
 with st.expander("⚠️ **Referencia de tipo de tormenta y seguridad operacional**"):
@@ -764,15 +764,15 @@ with st.expander("⚠️ **Referencia de tipo de tormenta y seguridad operaciona
 
 initial_datetime = datetime(2023, 12, 17, 6, 0, 0) 
 
-selected_date = st.date_input(":[#242C4F](Selecciona la fecha)", value=initial_datetime.date())
-selected_time = st.time_input(":[#242C4F](Selecciona la hora [UTC])", value=initial_datetime.time(), step=300) 
+selected_date = st.date_input(":#242C4F[Selecciona la fecha]", value=initial_datetime.date())
+selected_time = st.time_input(":#242C4F[Selecciona la hora (UTC)]", value=initial_datetime.time(), step=300) 
 
 start_window_user = datetime.combine(selected_date, selected_time)
 
 data = load_and_process_data(start_window_user, fs_global)
 
 if data is None: 
-    st.warning(":[#242C4F](No se pudieron cargar los datos para la fecha y hora seleccionadas. Intenta con otra fecha/hora.)")
+    st.warning(":#242C4F[No se pudieron cargar los datos para la fecha y hora seleccionadas. Intenta con otra fecha/hora.]")
 else:
     warning_polygons = data["warning_polygons"]
     metrics_df = data["metrics_df"]
@@ -783,14 +783,14 @@ else:
     col1, col2 = st.columns([1, 1])
 
     with col2:
-        st.header(":[#242C4F](Tabla de Advertencias)")
+        st.header(":#242C4F[Tabla de Advertencias]")
 
         options = [f"ID: {int(row.ID)}, Tipo: {row.Tipo}, Tope: FL{int(row.MaxFL):03d}, Area: {int(row.Area)} km²"
                    for idx, row in metrics_df.iterrows()]  
         options.insert(0, "-- Seleccionar Polígono --")
 
         selected_option = st.selectbox(
-                                        ":[#242C4F]Seleccionar una advertencia para resaltar en el mapa:",
+                                        ":#242C4F[Seleccionar una advertencia para resaltar en el mapa:]",
                                         options,
                                         index=0
                                       )
@@ -832,7 +832,7 @@ else:
             )
 
     with col1:
-        st.header(":[#242C4F](Mapa de Advertencias)")
+        st.header(":#242C4F[Mapa de Advertencias]")
         fig = plot_interactive_map_streamlit(
             warning_polygons, metrics_df,
             data["ir_data"], data["x"], data["y"], data["abi_crs"],
