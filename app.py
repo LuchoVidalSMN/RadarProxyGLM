@@ -660,8 +660,8 @@ def plot_interactive_map_streamlit(
             line_width = 2.5
             zorder = 7
         else:
-            edge_color = "cyan"  # Contorno tipo SIGMET
-            line_width = 1.2
+            edge_color = "orange"  # Contorno tipo SIGMET
+            line_width = 1
             zorder = 6
 
         # Se dibuja la envoltura convexa simplificada
@@ -717,7 +717,7 @@ def plot_interactive_map_streamlit(
                     xytext=(cen_x - dlon, cen_y - dlat),
                     arrowprops=dict(
                         arrowstyle="<->, head_width=0.4, head_length=0.6",
-                        color="yellow" if highlight_poly_id == current_id else edge_color,
+                        color="red" if highlight_poly_id == current_id else edge_color,
                         linewidth=2.0 if highlight_poly_id == current_id else 1.2,
                         mutation_scale=12,
                     ),
