@@ -20,9 +20,14 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 
 from skimage.measure import find_contours
 
+import matplotlib as mpl
+
 # ============================================================================ #
 # 0. Definiciones globales o constantes (fuera de funciones para Streamlit)
 # ============================================================================ #
+
+# Grosor del entramado de los poligonos (advertencias)
+mpl.rcParams['hatch.linewidth'] = 0.8
 
 # Paleta de colores para radar real
 aviation_colors = [
@@ -432,7 +437,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
     fed_smoothed   = gaussian_filter(fed_high, sigma=1.5)
 
     max_reflectivity_proxy = np.zeros_like(fed_smoothed)
-    mask = fed_smoothed > 0.1
+    mask = fed_smoothed > 0.02
     
     # Modelos REF-FED
     # max_reflectivity_proxy[mask] = 33.0 + 10.0 * np.log10(fed_smoothed[mask])
@@ -618,13 +623,13 @@ def plot_interactive_map_streamlit(
     
     if ir_data is not None:
         im_ir = ax.imshow(
-            ir_data, origin="upper",
-            extent=[x.min(), x.max(), y.min(), y.max()],
-            transform=abi_crs,
-            cmap="Greys", vmin=-90, vmax=40, zorder=1
-        )
+                          ir_data, origin="upper",
+                          extent=[x.min(), x.max(), y.min(), y.max()],
+                          transform=abi_crs,
+                          cmap="Greys", vmin=-90, vmax=40, zorder=1
+                         )
 
-    proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 5, max_reflectivity_proxy)
+    proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 20, max_reflectivity_proxy)
 
     im_proxy = ax.pcolormesh(
                              lon_mesh_high, lat_mesh_high, proxy_masked,
@@ -746,9 +751,8 @@ st.image("smn_horizontal_arg-01.jpg", width=250)
 st.title("Producto TS-SIGMET | Dashboard Interactivo [EXPERIMENTAL]")
 
 # --- Glosario expansible de referencias ---
-with st.expander(
-    "⚠️ **Referencia de tipo de tormenta y seguridad operacional**"
-):
+with st.expander("⚠️ **Referencia de tipo de tormenta y seguridad operacional**"):
+    
     st.markdown("""
     Esta clasificación tipifica los sistemas convectivos a partir de su **morfología radar** (longitud del eje mayor, relación de aspecto y extensión superficial), siguiendo criterios adaptados de la literatura meteorológica (*Parker & Johnson; Gallus et al.*) para la toma de decisiones aeronáuticas y la emisión de mensajes SIGMET:
 
