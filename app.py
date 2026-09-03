@@ -538,13 +538,13 @@ def plot_interactive_map_streamlit(
             cmap="Greys", vmin=-90, vmax=40, zorder=1
         )
 
-    proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 10, max_reflectivity_proxy)
+    proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 0, max_reflectivity_proxy)
 
     im_proxy = ax.pcolormesh(
-        lon_mesh_high, lat_mesh_high, proxy_masked,
-        cmap=cmap_aviation, norm=norm_aviation,
-        alpha=0.75, transform=ccrs.PlateCarree(), zorder=2
-    )
+                             lon_mesh_high, lat_mesh_high, proxy_masked,
+                             cmap=cmap_aviation, norm=norm_aviation,
+                             alpha=0.75, transform=ccrs.PlateCarree(), zorder=2
+                            )
 
     if paises is not None: ax.add_feature(paises, facecolor='None', edgecolor='gray', linewidth=1.5)
     if fir_ezeiza is not None: ax.add_feature(fir_ezeiza, facecolor='None', edgecolor='blue', linewidth=1.5, zorder=2)
@@ -562,9 +562,9 @@ def plot_interactive_map_streamlit(
                 plt.text(px + 0.15, py - 0.21, type_code, fontsize=8, c='b', clip_on=True, zorder=5, transform=ccrs.PlateCarree())
 
     cbar_proxy = plt.colorbar(
-			      im_proxy, ax=ax, orientation="horizontal", pad=0.01, shrink=0.65,
-			      ticks=[25, 35, 45, 57.5]
-		             )
+                			      im_proxy, ax=ax, orientation="horizontal", pad=0.01, shrink=0.65,
+                			      ticks=[25, 35, 45, 57.5]
+                		         )
     cbar_proxy.ax.set_xticklabels(["Leve", "Moderado", "Fuerte", "Extremo"], fontsize=11)
     cbar_proxy.ax.tick_params(axis='x', length=0)
     
@@ -583,32 +583,33 @@ def plot_interactive_map_streamlit(
 
         # Se dibuja la envoltura convexa simplificada
         ax.add_geometries(
-            [poly],
-            ccrs.PlateCarree(),
-            facecolor="none",
-            edgecolor=edge_color,
-            linewidth=line_width,
-            linestyle="-",
-            zorder=zorder,
-        )
+                           [poly],
+                           ccrs.PlateCarree(),
+                           facecolor="none",
+                           edgecolor=edge_color,
+                           linewidth=line_width,
+                           linestyle="-",
+                           zorder=zorder,
+                         )
 
         # Opcional: Dibujar el ID en el centroide del polígono
         centroid = poly.centroid
         ax.text(
-            centroid.x,
-            centroid.y,
-            str(current_id),
-            color=edge_color,
-            fontsize=9,
-            weight="bold",
-            ha="center",
-            va="center",
-            transform=ccrs.PlateCarree(),
-            zorder=zorder + 1,
-        )
+                centroid.x,
+                centroid.y,
+                str(current_id),
+                color=edge_color,
+                fontsize=9,
+                weight="bold",
+                ha="center",
+                va="center",
+                transform=ccrs.PlateCarree(),
+                zorder=zorder + 1,
+               )
         
         # --- DIBUJAR FLECHA DE ORIENTACIÓN DEL EJE MAYOR ---
         if not metrics_df.empty and current_id in metrics_df["ID"].values:
+            
             row_poly = metrics_df[metrics_df["ID"] == current_id].iloc[0]
 
             # Solo dibujamos flecha en sistemas con alargamiento perceptible (ej. eje mayor > 40 km)
@@ -622,10 +623,7 @@ def plot_interactive_map_streamlit(
                 arrow_len_km = min(row_poly.EjeMayor_km * 0.4, 60.0)
                 lat_rad = np.radians(cen_y)
                 dlat = (arrow_len_km / 111.32) * np.cos(np.radians(rumbo_deg))
-                dlon = (
-                    (arrow_len_km / (111.32 * np.cos(lat_rad)))
-                    * np.sin(np.radians(rumbo_deg))
-                )
+                dlon = ((arrow_len_km / (111.32 * np.cos(lat_rad))) * np.sin(np.radians(rumbo_deg)))
 
                 # Flecha bidireccional alineada con el eje mayor del Convex Hull
                 ax.annotate(
@@ -641,26 +639,6 @@ def plot_interactive_map_streamlit(
                     xycoords=ccrs.PlateCarree()._as_mpl_transform(ax),
                     zorder=zorder + 1,
                 )
-
-    # for poly_idx, poly in enumerate(warning_polygons):
-    
-    #     current_id = poly_idx + 1
-    #     edge_color = 'none'
-    #     line_width = 0
-
-    #     if highlight_poly_id == current_id:
-    #         edge_color = 'red'
-    #         line_width = 2
-    #         zorder = 7
-    #     else:
-    #         zorder = 6
-
-    #     ax.add_geometries([poly], ccrs.PlateCarree(),
-    #                       facecolor='none', edgecolor=edge_color, linewidth=line_width, linestyle='-', zorder=zorder)
-                          
-        # Cambiamos [poly] por [poly.envelope] para dibujar el rectángulo
-        #ax.add_geometries([poly.envelope], ccrs.PlateCarree(),
-        #                  facecolor='none', edgecolor=edge_color, linewidth=line_width, linestyle='-', zorder=zorder)
 
     #plt.title(
     #    f"GOES-19 Canal 13 IR + Proxy radar GLM 5-min\n"
@@ -750,18 +728,6 @@ else:
             mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")         
             arrow_symbol = rumbo_to_arrow(int(poly_data.Rumbo.replace("°", "")))
             mc7.metric("Orientación / Rumbo", f"{poly_data.Rumbo}", delta=arrow_symbol)  # delta muestra la flecha y dirección
-            
-            
-            # # --- Mostrar las métricas del polígono seleccionado ---
-            # st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
-            # poly_data = metrics_df[metrics_df['ID'] == highlight_poly_id].iloc[0]
-            
-            # mc1, mc2, mc3, mc4 = st.columns(4)
-            # mc1.metric("Tope (FL)", f"FL{int(poly_data.MaxFL):03d}")
-            # mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
-            # mc3.metric("Área", f"{poly_data.Area:.0f} km²")
-            # mc4.metric("Tipo", f"{poly_data.Escala}")
-            # # -------------------------------------------------------------
 
         st.dataframe(metrics_df, height=600, hide_index=True)
 
