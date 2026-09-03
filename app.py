@@ -167,9 +167,9 @@ def load_shape_features(path_shp):
 def load_airport_data(path_csv):
     try:
         return pd.read_csv(path_csv,
-                         sep=r'\s+',
-                         header=None,
-                         names=['Codigo ICAO','Lat','Lon'])
+                           sep=r'\s+',
+                           header=None,
+                           names=['Codigo ICAO','Lat','Lon'])
     except Exception as e:
         st.error(f"Error cargando datos de aeropuertos {path_csv}: {e}")
         return pd.DataFrame()
@@ -675,7 +675,7 @@ with st.expander("⚠️ **Referencia de tipo de tormentas y seguridad operacion
     """)
 # -------------------------------------------------
 
-initial_datetime = datetime(2025, 11, 4, 3, 0, 0) 
+initial_datetime = datetime(2023, 12, 17, 6, 0, 0) 
 
 selected_date = st.date_input("Selecciona la fecha", value=initial_datetime.date())
 selected_time = st.time_input("Selecciona la hora (UTC)", value=initial_datetime.time(), step=300) 
