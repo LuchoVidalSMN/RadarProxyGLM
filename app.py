@@ -554,7 +554,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
                                     'CenLat': centroid_lat,
                                     'Area': area_sigmet_km2,
                                     'Escala': categoria_codigo,  # 'IC', 'CC', 'QLCS', 'MCS'
-                                    # 'Tipo_Desc': categoria_desc, # Nombre completo para la UI
+                                    'Tipo_Desc': categoria_desc, # Nombre completo para la UI
                                     'Aspect_Ratio': round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
                                     'EjeMayor_km': hull_info["major_axis_km"],
                                     'EjeMenor_km': hull_info["minor_axis_km"],
