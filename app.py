@@ -131,6 +131,53 @@ def compute_sigmet_convex_hull_properties(poly, simplify_deg=0.08):
         "area_hull_km2": round(area_hull_km2, 1),
     }
 
+def classify_convective_morphology(area_km2, major_axis_km, minor_axis_km, max_dbz):
+    """
+    Clasifica el sistema convectivo siguiendo criterios morfológicos de radar:
+    - IC  : Isolated Cell (Celda Individual / Celda Aislada)
+    - CC  : Cluster of Cells (Clúster Convectivo Multicelular)
+    - QLCS: Quasi-Linear Convective System / Squall Line (Línea Convectiva)
+    - MCS : Mesoscale Convective System (Sistema Convectivo de Mesoescala)
+    """
+    # Evitar divisiones por cero en polígonos casi lineales o muy pequeños
+    minor_axis = max(minor_axis_km, 1.0)
+    aspect_ratio = major_axis_km / minor_axis
+
+    # 1. Sistemas lineales (Squall line / QLCS):
+    # Longitud significativa y eje mayor claramente dominante frente al eje menor
+    if major_axis_km >= 100.0 and aspect_ratio >= 3.0:
+        return {
+            "codigo": "QLCS",
+            "tipo": "Línea Convectiva (QLCS)",
+            "impacto": "Bloqueo transversal extenso; frentes de ráfaga y turbulencia severa lineal."
+        }
+
+    # 2. Sistemas Convectivos de Mesoescala no lineales:
+    # Gran cobertura areal y gran extensión en ambas dimensiones
+    elif area_km2 >= 1000.0 or (major_axis_km >= 100.0 and minor_axis_km >= 40.0):
+        return {
+            "codigo": "MCS",
+            "tipo": "Sistema Convectivo (MCS)",
+            "impacto": "Disrupción a gran escala; desvíos estratégicos interprovinciales."
+        }
+
+    # 3. Clúster Convectivo Multicelular:
+    # Área intermedia o moderada sin eje lineal marcado
+    elif area_km2 >= 400.0 or major_axis_km >= 50.0:
+        return {
+            "codigo": "CC",
+            "tipo": "Clúster Multicelular",
+            "impacto": "Bloqueo de aerovías locales; navegación táctica compleja entre celdas."
+        }
+
+    # 4. Celda aislada / pulso ordinario:
+    else:
+        return {
+            "codigo": "IC",
+            "tipo": "Celda Aislada",
+            "impacto": "Desvíos tácticos directos de corto radio."
+        }
+
 # ============================================================================ #
 # 1. Funciones auxiliares de carga y procesamiento (Cacheables con Streamlit)
 # ============================================================================ #
@@ -185,35 +232,6 @@ def get_abi_ctp_file(_fs, target_time, bucket_name):
     folder_path = f"{bucket_name}/ABI-L2-CTPF/{target_time.strftime('%Y/%j/%H/')}"
     files = _fs.glob(f"{folder_path}*CTPF*_{time_prefix}*")
     return files[0] if files else None
-
-# @st.cache_data(ttl=3600) # Cachea los resultados por 1 hora
-# def get_glm_files_for_window(_fs, start_time, minutes=5):
-#     all_files = []
-#     num_steps = (minutes * 60) // 20
-#     for i in range(num_steps):
-#         current_time = start_time + timedelta(seconds=i * 20)
-#         time_prefix = current_time.strftime("s%Y%j%H%M%S")
-#         folder_path = f"noaa-goes19/GLM-L2-LCFA/{current_time.strftime('%Y/%j/%H/')}"
-#         try:
-#             matching_files = _fs.glob(f"{folder_path}*_{time_prefix}*")
-#             all_files.extend(matching_files)
-#         except:
-#             continue
-#     return all_files
-
-# @st.cache_data(ttl=3600) # Cachea los resultados por 1 hora
-# def get_abi_c13_file(_fs, target_time):
-#     time_prefix = target_time.strftime("s%Y%j%H%M")
-#     folder_path = f"noaa-goes19/ABI-L2-CMIPF/{target_time.strftime('%Y/%j/%H/')}"
-#     files = _fs.glob(f"{folder_path}*C13_*_{time_prefix}*")
-#     return files[0] if files else None
-
-# @st.cache_data(ttl=3600)
-# def get_abi_ctp_file(_fs, target_time):
-#     time_prefix = target_time.strftime("s%Y%j%H%M")
-#     folder_path = f"noaa-goes19/ABI-L2-CTPF/{target_time.strftime('%Y/%j/%H/')}"
-#     files = _fs.glob(f"{folder_path}*CTPF*_{time_prefix}*")
-#     return files[0] if files else None
 
 @st.cache_data
 def cluster_and_get_polygons(reflectivity_data, threshold_dbz, lon_mesh, lat_mesh, min_area_km2=100):
@@ -505,35 +523,47 @@ def load_and_process_data(start_window_datetime, _fs_param):
                                )
             max_fed = (np.max(fed_values_in_poly) if fed_values_in_poly else np.nan)
             min_ir_temp = (np.min(ir_temps_in_poly) if ir_temps_in_poly else np.nan)
-
-            # Clasificación por área del Hull
+            
+            # --- Clasificación Morfológica Tipo Radar ---
             area_sigmet_km2 = hull_info["area_hull_km2"]
-            if area_sigmet_km2 < 500:
-                categoria = "CO"
-            elif area_sigmet_km2 < 1000:
-                categoria = "MC"
-            else:
-                categoria = "SC"
+            clasi = classify_convective_morphology(
+                                                    area_km2=area_sigmet_km2,
+                                                    major_axis_km=hull_info["major_axis_km"],
+                                                    minor_axis_km=hull_info["minor_axis_km"],
+                                                    max_dbz=max_reflectivity
+                                                  )
+            categoria_codigo = clasi["codigo"]
+            categoria_desc   = clasi["tipo"]
+            # --------------------------------------------         
+
+            # # Clasificación por área del Hull
+            # area_sigmet_km2 = hull_info["area_hull_km2"]
+            # if area_sigmet_km2 < 500:
+            #     categoria = "CO"
+            # elif area_sigmet_km2 < 1000:
+            #     categoria = "MC"
+            # else:
+            #     categoria = "SC"
 
             min_ctp = np.min(ctp_values_in_poly) if ctp_values_in_poly else np.nan
             max_fl = pressure_to_flight_level(min_ctp)
-
-            metrics_list.append(
-                                {
-                                    "ID": poly_id,
-                                    "CenLon": centroid_lon,
-                                    "CenLat": centroid_lat,
-                                    "Area": area_sigmet_km2,
-                                    "Escala": categoria,
-                                    "EjeMayor_km": hull_info["major_axis_km"],
-                                    "EjeMenor_km": hull_info["minor_axis_km"],
-                                    "Rumbo": f"{hull_info['orientation_deg']:03d}°",
-                                    "MaxRef": round(max_reflectivity, 1),
-                                    "MaxFED": round(max_fed, 1),
-                                    "MinCTT": round(min_ir_temp, 1),
-                                    "MaxFL": max_fl,
-                                }
-                               )
+            
+            metrics_list.append({
+                                    'ID': poly_id,
+                                    'CenLon': centroid_lon,
+                                    'CenLat': centroid_lat,
+                                    'Area': area_sigmet_km2,
+                                    'Escala': categoria_codigo,  # 'IC', 'CC', 'QLCS', 'MCS'
+                                    'Tipo_Desc': categoria_desc, # Nombre completo para la UI
+                                    'Aspect_Ratio': round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
+                                    'EjeMayor_km': hull_info["major_axis_km"],
+                                    'EjeMenor_km': hull_info["minor_axis_km"],
+                                    'Rumbo': f"{hull_info['orientation_deg']:03d}°",
+                                    'MaxRef': round(max_reflectivity, 1),
+                                    'MaxFED': round(max_fed, 1),
+                                    'MinCTT': round(min_ir_temp, 1),
+                                    'MaxFL': max_fl,
+                                })
 
         # Reemplazamos los polígonos originales por las envolturas SIGMET
         warning_polygons = sigmet_hulls
@@ -777,13 +807,15 @@ else:
             mc1.metric("Tope (FL)", f"FL{int(poly_data.MaxFL):03d}")
             mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
             mc3.metric("Área Envolvente", f"{poly_data.Area:.0f} km²")
-            mc4.metric("Tipo", f"{poly_data.Escala}")
+            mc4.metric("Clasificación", f"{poly_data.Escala}", help=poly_data.Tipo_Desc)
 
             mc5, mc6, mc7 = st.columns(3)
             mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
             mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")         
             arrow_symbol = rumbo_to_arrow(int(poly_data.Rumbo.replace("°", "")))
             mc7.metric("Orientación / Rumbo", f"{poly_data.Rumbo}", delta=arrow_symbol)  # delta muestra la flecha y dirección
+
+            st.caption(f"**Estructura:** {poly_data.Tipo_Desc} | **Relación de aspecto:** {poly_data.Aspect_Ratio:.1f}:1")
 
         st.dataframe(metrics_df, height=600, hide_index=True)
 
