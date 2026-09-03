@@ -661,21 +661,24 @@ def plot_interactive_map_streamlit(
         if highlight_poly_id == current_id:
             edge_color = "red"
             line_width = 2.5
+            hatch_pattern = '///'
             zorder = 7
         else:
             edge_color = "#219ebc"  # Contorno tipo SIGMET
-            line_width = 1
+            line_width = 1.5
+            hatch_pattern = '///'
             zorder = 6
 
-        # Se dibuja la envoltura convexa simplificada
+        # Se agrega el parámetro hatch manteniendo facecolor='none'
         ax.add_geometries(
                            [poly],
                            ccrs.PlateCarree(),
-                           facecolor="none",
+                           facecolor='none',          # Sin relleno sólido para ver los ecos de radar debajo
                            edgecolor=edge_color,
                            linewidth=line_width,
-                           linestyle="-",
-                           zorder=zorder,
+                           linestyle='-',
+                           hatch=hatch_pattern,       # <-- Líneas diagonales
+                           zorder=zorder
                          )
 
         # Opcional: Dibujar el ID en el centroide del polígono
