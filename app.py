@@ -632,20 +632,20 @@ def plot_interactive_map_streamlit(
                              alpha=0.75, transform=ccrs.PlateCarree(), zorder=2
                             )
 
-    if paises is not None: ax.add_feature(paises, facecolor='None', edgecolor='gray', linewidth=1)
-    if fir_ezeiza is not None: ax.add_feature(fir_ezeiza, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
-    if fir_cordoba is not None: ax.add_feature(fir_cordoba, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
-    if fir_resistencia is not None: ax.add_feature(fir_resistencia, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
-    if fir_mendoza is not None: ax.add_feature(fir_mendoza, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
-    if fir_comodoro is not None: ax.add_feature(fir_comodoro, facecolor='None', edgecolor='blue', linewidth=1, zorder=2)
+    if paises is not None: ax.add_feature(paises, facecolor='None', edgecolor='#778da9', linewidth=1)
+    if fir_ezeiza is not None: ax.add_feature(fir_ezeiza, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
+    if fir_cordoba is not None: ax.add_feature(fir_cordoba, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
+    if fir_resistencia is not None: ax.add_feature(fir_resistencia, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
+    if fir_mendoza is not None: ax.add_feature(fir_mendoza, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
+    if fir_comodoro is not None: ax.add_feature(fir_comodoro, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
                
     if not df_airports.empty:
         for i, type_code in enumerate(df_airports['Codigo ICAO'].values):
             px = df_airports['Lon'].values[i]
             py = df_airports['Lat'].values[i]
             if (lon_min_plot < px < lon_max_plot) and (lat_min_plot < py < lat_max_plot):
-                plt.scatter(px, py, marker='s', s=12, color='b', zorder=5, transform=ccrs.PlateCarree())
-                plt.text(px + 0.15, py - 0.21, type_code, fontsize=8, c='b', clip_on=True, zorder=5, transform=ccrs.PlateCarree())
+                plt.scatter(px, py, marker='s', s=12, color='#072ac8', zorder=5, transform=ccrs.PlateCarree())
+                plt.text(px + 0.15, py - 0.21, type_code, fontsize=8, c='#072ac8', clip_on=True, zorder=5, transform=ccrs.PlateCarree())
 
     cbar_proxy = plt.colorbar(
                 			      im_proxy, ax=ax, orientation="horizontal", pad=0.01, shrink=0.65,
@@ -743,11 +743,11 @@ def plot_interactive_map_streamlit(
 
 st.set_page_config(layout="wide")
 st.image("smn_horizontal_arg-01.jpg", width=250) 
-st.title("Producto TS-SIGMET | Dashboard Interactivo ")
+st.title("Producto TS-SIGMET | Dashboard Interactivo [EXPERIMENTAL]")
 
 # --- Glosario expansible de referencias ---
 with st.expander(
-    "⚠️ **Referencia de morfología de tormentas y seguridad operacional**"
+    "⚠️ **Referencia de tipo de tormenta y seguridad operacional**"
 ):
     st.markdown("""
     Esta clasificación tipifica los sistemas convectivos a partir de su **morfología radar** (longitud del eje mayor, relación de aspecto y extensión superficial), siguiendo criterios adaptados de la literatura meteorológica (*Parker & Johnson; Gallus et al.*) para la toma de decisiones aeronáuticas y la emisión de mensajes SIGMET:
