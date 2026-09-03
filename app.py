@@ -790,7 +790,7 @@ else:
         options.insert(0, "-- Seleccionar Polígono --")
 
         selected_option = st.selectbox(
-                                        ":#242C4F[Seleccionar una advertencia para resaltar en el mapa:]",
+                                        ":blue[Seleccionar una advertencia para resaltar en el mapa:]",
                                         options,
                                         index=0
                                       )
@@ -817,7 +817,7 @@ else:
         st.dataframe(
                      metrics_df,
                      column_order=["ID", "Tipo", "Area", "MaxFL", "MaxRef", "MinCTT", "MaxFED"],
-                     height=600,
+                     height=500,
                      hide_index=True,
                     )
 
