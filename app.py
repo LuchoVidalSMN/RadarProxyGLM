@@ -687,7 +687,7 @@ def plot_interactive_map_streamlit(
                             xy=(cen_x + dlon, cen_y + dlat),
                             xytext=(cen_x - dlon, cen_y - dlat),
                             arrowprops=dict(
-                                            arrowstyle="<-->, head_width=0.2, head_length=0.3",
+                                            arrowstyle="<->, head_width=0.2, head_length=0.3",
                                             color="red" if highlight_poly_id == current_id else edge_color,
                                             linewidth=2.0 if highlight_poly_id == current_id else 1.2,
                                             mutation_scale=12,
