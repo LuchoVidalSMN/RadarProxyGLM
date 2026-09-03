@@ -360,16 +360,25 @@ def load_and_process_data(start_window_datetime, _fs_param):
 
     max_reflectivity_proxy = np.zeros_like(fed_smoothed)
     mask = fed_smoothed > 0.1
-    max_reflectivity_proxy[mask] = 33.0 + 10.0 * np.log10(fed_smoothed[mask])
+    
+    # Modelos REF-FED
+    # max_reflectivity_proxy[mask] = 33.0 + 10.0 * np.log10(fed_smoothed[mask])
+    max_reflectivity_proxy[mask] = 42.2 + 12.4 * np.log10(fed_smoothed[mask])
+    # max_reflectivity_proxy[mask] = 44.6 + 23.5 * np.log10(fed_smoothed[mask]) + 8.6 * np.power(np.log10(fed_smoothed[mask]),2)
 
     lon_mesh_high, lat_mesh_high = np.meshgrid(
-						(lon_bins_high[:-1] + lon_bins_high[1:]) / 2,
-						(lat_bins_high[:-1] + lat_bins_high[1:]) / 2
-					      )
+                            					   (lon_bins_high[:-1] + lon_bins_high[1:]) / 2,
+                            					   (lat_bins_high[:-1] + lat_bins_high[1:]) / 2
+                            					  )
 
     # --- Detección de Polígonos de Advertencia y Métricas ---
     warning_threshold_dbz = 25
-    warning_polygons = cluster_and_get_polygons(max_reflectivity_proxy, warning_threshold_dbz, lon_mesh_high, lat_mesh_high)
+    warning_polygons = cluster_and_get_polygons(
+                                                max_reflectivity_proxy,
+                                                warning_threshold_dbz,
+                                                lon_mesh_high,
+                                                lat_mesh_high
+                                               )
 
     # --- Crear un bounding box con los límites del mapa ---
     plot_bbox = box(lon_min_plot, lat_min_plot, lon_max_plot, lat_max_plot)
@@ -388,17 +397,16 @@ def load_and_process_data(start_window_datetime, _fs_param):
         sigmet_hulls = []
 
         for idx, poly in enumerate(warning_polygons):
+            
             poly_id = idx + 1
+            
             centroid_lon = poly.centroid.x
             centroid_lat = poly.centroid.y
 
-            # --- NUEVO: Calcular Convex Hull simplificado y métricas morfológicas ---
-            hull_info = compute_sigmet_convex_hull_properties(
-                poly, simplify_deg=0.08
-            )
+            # --- Calcular Convex Hull simplificado y métricas morfológicas ---
+            hull_info = compute_sigmet_convex_hull_properties(poly, simplify_deg=0.08)
             sigmet_poly = hull_info["hull_polygon"]
             sigmet_hulls.append(sigmet_poly)
-            # -----------------------------------------------------------------------
 
             reflectivity_values_in_poly = []
             ir_temps_in_poly = []
@@ -407,52 +415,41 @@ def load_and_process_data(start_window_datetime, _fs_param):
             num_pixels = 0
 
             for i_flat in range(len(grid_points)):
+                
                 current_point = grid_points[i_flat]
+                
                 # Evaluamos contenido con el polígono original de reflectividad
                 if poly.contains(current_point):
+                    
                     num_pixels += 1
-                    r, c = np.unravel_index(
-                        i_flat, max_reflectivity_proxy.shape
-                    )
+                    r, c = np.unravel_index(i_flat, max_reflectivity_proxy.shape)
 
-                    reflectivity_values_in_poly.append(
-                        max_reflectivity_proxy[r, c]
-                    )
+                    reflectivity_values_in_poly.append(max_reflectivity_proxy[r, c])
                     fed_values_in_poly.append(fed_smoothed[r, c])
 
                     x_transformed, y_transformed = abi_crs.transform_point(
-                        lon_mesh_high[r, c],
-                        lat_mesh_high[r, c],
-                        ccrs.PlateCarree(),
-                    )
+                                                                           lon_mesh_high[r, c],
+                                                                           lat_mesh_high[r, c],
+                                                                           ccrs.PlateCarree(),
+                                                                          )
                     idx_x_abi = np.argmin(np.abs(x - x_transformed))
                     idx_y_abi = np.argmin(np.abs(y - y_transformed))
                     ir_temps_in_poly.append(ir_data[idx_y_abi, idx_x_abi])
 
-                    if (
-                        ctp_data is not None
-                        and x_ctp is not None
-                        and y_ctp is not None
-                    ):
+                    if (ctp_data is not None and x_ctp is not None and y_ctp is not None):
                         idx_x_act = np.argmin(np.abs(x_ctp - x_transformed))
                         idx_y_act = np.argmin(np.abs(y_ctp - y_transformed))
                         val_pres = ctp_data[idx_y_act, idx_x_act]
-                        if not np.ma.is_masked(val_pres) and not np.isnan(
-                            val_pres
-                        ):
+                        if not np.ma.is_masked(val_pres) and not np.isnan(val_pres):
                             ctp_values_in_poly.append(val_pres)
 
             max_reflectivity = (
-                np.max(reflectivity_values_in_poly)
-                if reflectivity_values_in_poly
-                else np.nan
-            )
-            max_fed = (
-                np.max(fed_values_in_poly) if fed_values_in_poly else np.nan
-            )
-            min_ir_temp = (
-                np.min(ir_temps_in_poly) if ir_temps_in_poly else np.nan
-            )
+                                np.max(reflectivity_values_in_poly)
+                                if reflectivity_values_in_poly
+                                else np.nan
+                               )
+            max_fed = (np.max(fed_values_in_poly) if fed_values_in_poly else np.nan)
+            min_ir_temp = (np.min(ir_temps_in_poly) if ir_temps_in_poly else np.nan)
 
             # Clasificación por área del Hull
             area_sigmet_km2 = hull_info["area_hull_km2"]
@@ -467,130 +464,50 @@ def load_and_process_data(start_window_datetime, _fs_param):
             max_fl = pressure_to_flight_level(min_ctp)
 
             metrics_list.append(
-                {
-                    "ID": poly_id,
-                    "CenLon": centroid_lon,
-                    "CenLat": centroid_lat,
-                    "Area": area_sigmet_km2,
-                    "Escala": categoria,
-                    "EjeMayor_km": hull_info["major_axis_km"],
-                    "EjeMenor_km": hull_info["minor_axis_km"],
-                    "Rumbo": f"{hull_info['orientation_deg']:03d}°",
-                    "MaxRef": round(max_reflectivity, 1),
-                    "MaxFED": round(max_fed, 1),
-                    "MinCTT": round(min_ir_temp, 1),
-                    "MaxFL": max_fl,
-                }
-            )
+                                {
+                                    "ID": poly_id,
+                                    "CenLon": centroid_lon,
+                                    "CenLat": centroid_lat,
+                                    "Area": area_sigmet_km2,
+                                    "Escala": categoria,
+                                    "EjeMayor_km": hull_info["major_axis_km"],
+                                    "EjeMenor_km": hull_info["minor_axis_km"],
+                                    "Rumbo": f"{hull_info['orientation_deg']:03d}°",
+                                    "MaxRef": round(max_reflectivity, 1),
+                                    "MaxFED": round(max_fed, 1),
+                                    "MinCTT": round(min_ir_temp, 1),
+                                    "MaxFL": max_fl,
+                                }
+                               )
 
         # Reemplazamos los polígonos originales por las envolturas SIGMET
         warning_polygons = sigmet_hulls
-        
-#         for idx, poly in enumerate(warning_polygons):
-#             poly_id = idx + 1
-#             centroid_lon = poly.centroid.x
-#             centroid_lat = poly.centroid.y
-            
-#             # --- Calcular Convex Hull simplificado y métricas morfológicas ---
-#             hull_info = compute_sigmet_convex_hull_properties(
-#                 poly, simplify_deg=0.08
-#             )
-#             sigmet_poly = hull_info["hull_polygon"]
-#             sigmet_hulls.append(sigmet_poly)
-                       
-#             reflectivity_values_in_poly = []
-#             ir_temps_in_poly = []
-#             fed_values_in_poly = []
-#             ctp_values_in_poly = []
-#             num_pixels = 0
-
-#             for i_flat in range(len(grid_points)):
-#                 current_point = grid_points[i_flat]
-#                 if poly.contains(current_point):
-#                     num_pixels += 1
-#                     r, c = np.unravel_index(i_flat, max_reflectivity_proxy.shape)
-
-#                     reflectivity_values_in_poly.append(max_reflectivity_proxy[r, c])
-#                     fed_values_in_poly.append(fed_smoothed[r, c])
-
-#                     x_transformed, y_transformed = abi_crs.transform_point(lon_mesh_high[r, c], lat_mesh_high[r, c], ccrs.PlateCarree())
-#                     idx_x_abi = np.argmin(np.abs(x - x_transformed))
-#                     idx_y_abi = np.argmin(np.abs(y - y_transformed))
-#                     ir_temps_in_poly.append(ir_data[idx_y_abi, idx_x_abi])
-                    
-#                     # Guardar valores de presión usando la grilla de CTPF
-#                     if ctp_data is not None and x_ctp is not None and y_ctp is not None:
-#                         # Buscar los índices correspondientes en la grilla de presión
-#                         idx_x_act = np.argmin(np.abs(x_ctp - x_transformed))
-#                         idx_y_act = np.argmin(np.abs(y_ctp - y_transformed))
-                        
-#                         val_pres = ctp_data[idx_y_act, idx_x_act]
-#                         if not np.ma.is_masked(val_pres) and not np.isnan(val_pres):
-#                             ctp_values_in_poly.append(val_pres)
-
-#             max_reflectivity = np.max(reflectivity_values_in_poly) if reflectivity_values_in_poly else np.nan
-#             max_fed = np.max(fed_values_in_poly) if fed_values_in_poly else np.nan
-#             min_ir_temp = np.min(ir_temps_in_poly) if ir_temps_in_poly else np.nan
-            
-#             # Convertir píxeles a km2
-#             # 1 grado geográfico = ~111.32 km
-#             lat_rad = np.radians(centroid_lat)
-#             alto_pixel_km = 0.05 * 111.32
-#             ancho_pixel_km = 0.05 * 111.32 * np.cos(lat_rad)
-#             area_por_pixel_km2 = alto_pixel_km * ancho_pixel_km
-#             area_total_km2 = num_pixels * area_por_pixel_km2
-
-#             # --- Clasificación por escala de impacto ---
-#             if area_total_km2 < 500:
-#                 categoria = "CO"
-#             elif area_total_km2 < 1000:
-#                 categoria = "MC"
-#             else:
-#                 categoria = "SC"
-#             # -------------------------------------------
-            
-#             min_ctp  = np.min(ctp_values_in_poly) if ctp_values_in_poly else np.nan
-#             # Convertir las presiones a Flight Level (FL)
-#             max_fl  = pressure_to_flight_level(min_ctp)
-
-#             metrics_list.append({
-# 				 'ID': poly_id,
-# 				 'CenLon': centroid_lon,
-# 				 'CenLat': centroid_lat,
-# 				 #'Pixels': num_pixels,
-# 				 'Area': area_total_km2,
-# 				 'Escala': categoria,
-# 				 'MaxRef': round(max_reflectivity,1),
-# 				 'MaxFED': round(max_fed,1),
-# 				 'MinCTT': round(min_ir_temp,1),
-# 				 'MaxFL': max_fl,
-# 			        })
 
     metrics_df = pd.DataFrame(metrics_list)
 
     return {
-		"warning_polygons": warning_polygons,
-		"metrics_df": metrics_df,
-		"ir_data": ir_data,
-		"x": x,
-		"y": y,
-		"abi_crs": abi_crs,
-		"max_reflectivity_proxy": max_reflectivity_proxy,
-		"lon_mesh_high": lon_mesh_high,
-		"lat_mesh_high": lat_mesh_high,
-		"lon_min": lon_min,
-		"lon_max": lon_max,
-		"lat_min": lat_min,
-		"lat_max": lat_max,
-		"paises": paises,
-		"fir_ezeiza": fir_ezeiza,
-		"fir_cordoba": fir_cordoba,
-		"fir_resistencia": fir_resistencia,
-		"fir_mendoza": fir_mendoza,
-		"fir_comodoro": fir_comodoro,
-		"df_airports": df_airports,
-		"start_window": start_window_datetime
-          }
+        		"warning_polygons": warning_polygons,
+        		"metrics_df": metrics_df,
+        		"ir_data": ir_data,
+        		"x": x,
+        		"y": y,
+        		"abi_crs": abi_crs,
+        		"max_reflectivity_proxy": max_reflectivity_proxy,
+        		"lon_mesh_high": lon_mesh_high,
+        		"lat_mesh_high": lat_mesh_high,
+        		"lon_min": lon_min,
+        		"lon_max": lon_max,
+        		"lat_min": lat_min,
+        		"lat_max": lat_max,
+        		"paises": paises,
+        		"fir_ezeiza": fir_ezeiza,
+        		"fir_cordoba": fir_cordoba,
+        		"fir_resistencia": fir_resistencia,
+        		"fir_mendoza": fir_mendoza,
+        		"fir_comodoro": fir_comodoro,
+        		"df_airports": df_airports,
+        		"start_window": start_window_datetime
+           }
 
 # ============================================================================ #
 # 2. Función para dibujar el mapa                                             #
