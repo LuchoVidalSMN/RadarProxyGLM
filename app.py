@@ -464,7 +464,6 @@ def load_and_process_data(start_window_datetime, _fs_param):
                     "EjeMayor_km": hull_info["major_axis_km"],
                     "EjeMenor_km": hull_info["minor_axis_km"],
                     "Rumbo": f"{hull_info['orientation_deg']:03d}°",
-                    "N_Vertices": hull_info["vertices"],
                     "MaxRef": round(max_reflectivity, 1),
                     "MaxFED": round(max_fed, 1),
                     "MinCTT": round(min_ir_temp, 1),
@@ -639,22 +638,60 @@ def plot_interactive_map_streamlit(
 		             )
     cbar_proxy.ax.set_xticklabels(["Leve", "Moderado", "Fuerte", "Extremo"], fontsize=11)
     cbar_proxy.ax.tick_params(axis='x', length=0)
-
-    for poly_idx, poly in enumerate(warning_polygons):
     
+    for poly_idx, poly in enumerate(warning_polygons):
         current_id = poly_idx + 1
-        edge_color = 'none'
-        line_width = 0
 
         if highlight_poly_id == current_id:
-            edge_color = 'red'
-            line_width = 2
+            edge_color = "red"
+            line_width = 2.5
             zorder = 7
         else:
+            edge_color = "cyan"  # Contorno tipo SIGMET
+            line_width = 1.2
             zorder = 6
 
-        ax.add_geometries([poly], ccrs.PlateCarree(),
-                          facecolor='none', edgecolor=edge_color, linewidth=line_width, linestyle='-', zorder=zorder)
+        # Se dibuja la envoltura convexa simplificada
+        ax.add_geometries(
+            [poly],
+            ccrs.PlateCarree(),
+            facecolor="none",
+            edgecolor=edge_color,
+            linewidth=line_width,
+            linestyle="-",
+            zorder=zorder,
+        )
+
+        # Opcional: Dibujar el ID en el centroide del polígono
+        centroid = poly.centroid
+        ax.text(
+            centroid.x,
+            centroid.y,
+            str(current_id),
+            color=edge_color,
+            fontsize=9,
+            weight="bold",
+            ha="center",
+            va="center",
+            transform=ccrs.PlateCarree(),
+            zorder=zorder + 1,
+        )
+
+    # for poly_idx, poly in enumerate(warning_polygons):
+    
+    #     current_id = poly_idx + 1
+    #     edge_color = 'none'
+    #     line_width = 0
+
+    #     if highlight_poly_id == current_id:
+    #         edge_color = 'red'
+    #         line_width = 2
+    #         zorder = 7
+    #     else:
+    #         zorder = 6
+
+    #     ax.add_geometries([poly], ccrs.PlateCarree(),
+    #                       facecolor='none', edgecolor=edge_color, linewidth=line_width, linestyle='-', zorder=zorder)
                           
         # Cambiamos [poly] por [poly.envelope] para dibujar el rectángulo
         #ax.add_geometries([poly.envelope], ccrs.PlateCarree(),
@@ -732,16 +769,33 @@ else:
         if selected_option != "-- Seleccionar Polígono --":
             highlight_poly_id = int(float(selected_option.split(',')[0].replace('ID: ', '')))
             
-            # --- Mostrar las métricas del polígono seleccionado ---
             st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
-            poly_data = metrics_df[metrics_df['ID'] == highlight_poly_id].iloc[0]
-            
+            poly_data = metrics_df[metrics_df["ID"] == highlight_poly_id].iloc[
+                0
+            ]
+
             mc1, mc2, mc3, mc4 = st.columns(4)
             mc1.metric("Tope (FL)", f"FL{int(poly_data.MaxFL):03d}")
             mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
-            mc3.metric("Área", f"{poly_data.Area:.0f} km²")
+            mc3.metric("Área Envolvente", f"{poly_data.Area:.0f} km²")
             mc4.metric("Tipo", f"{poly_data.Escala}")
-            # -------------------------------------------------------------
+
+            mc5, mc6, mc7, mc8 = st.columns(4)
+            mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
+            mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")
+            mc7.metric("Orientación / Rumbo", f"{poly_data.Rumbo}")
+            mc8.metric("Vértices", f"{poly_data.N_Vertices}")
+            
+            # # --- Mostrar las métricas del polígono seleccionado ---
+            # st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
+            # poly_data = metrics_df[metrics_df['ID'] == highlight_poly_id].iloc[0]
+            
+            # mc1, mc2, mc3, mc4 = st.columns(4)
+            # mc1.metric("Tope (FL)", f"FL{int(poly_data.MaxFL):03d}")
+            # mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
+            # mc3.metric("Área", f"{poly_data.Area:.0f} km²")
+            # mc4.metric("Tipo", f"{poly_data.Escala}")
+            # # -------------------------------------------------------------
 
         st.dataframe(metrics_df, height=600, hide_index=True)
 
