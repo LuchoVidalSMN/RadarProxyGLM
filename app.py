@@ -60,6 +60,18 @@ def pressure_to_flight_level(p_hpa):
     
     return fl_rounded
 
+def rumbo_to_arrow(angle_deg):
+    """Retorna una flecha tipográfica según el ángulo de orientación respecto al Norte."""
+    val = angle_deg % 180.0
+    if val <= 22.5 or val > 157.5:
+        return "↕ N-S"
+    elif 22.5 < val <= 67.5:
+        return "↗ NE-SW"
+    elif 67.5 < val <= 112.5:
+        return "↔ E-W"
+    else:
+        return "↘ SE-NW"
+
 # ============================================================================ #
 # 1. Funciones auxiliares de carga y procesamiento (Cacheables con Streamlit)
 # ============================================================================ #
@@ -640,6 +652,7 @@ def plot_interactive_map_streamlit(
     cbar_proxy.ax.tick_params(axis='x', length=0)
     
     for poly_idx, poly in enumerate(warning_polygons):
+        
         current_id = poly_idx + 1
 
         if highlight_poly_id == current_id:
@@ -676,6 +689,41 @@ def plot_interactive_map_streamlit(
             transform=ccrs.PlateCarree(),
             zorder=zorder + 1,
         )
+        
+        # --- DIBUJAR FLECHA DE ORIENTACIÓN DEL EJE MAYOR ---
+        if not metrics_df.empty and current_id in metrics_df["ID"].values:
+            row_poly = metrics_df[metrics_df["ID"] == current_id].iloc[0]
+
+            # Solo dibujamos flecha en sistemas con alargamiento perceptible (ej. eje mayor > 40 km)
+            if row_poly.EjeMayor_km >= 40:
+                cen_x = row_poly.CenLon
+                cen_y = row_poly.CenLat
+                rumbo_deg = float(str(row_poly.Rumbo).replace("°", ""))
+
+                # Semilongitud en grados aproximados para dibujar la flecha
+                # Limitamos la longitud visual para que no tape todo el polígono
+                arrow_len_km = min(row_poly.EjeMayor_km * 0.4, 60.0)
+                lat_rad = np.radians(cen_y)
+                dlat = (arrow_len_km / 111.32) * np.cos(np.radians(rumbo_deg))
+                dlon = (
+                    (arrow_len_km / (111.32 * np.cos(lat_rad)))
+                    * np.sin(np.radians(rumbo_deg))
+                )
+
+                # Flecha bidireccional alineada con el eje mayor del Convex Hull
+                ax.annotate(
+                    "",
+                    xy=(cen_x + dlon, cen_y + dlat),
+                    xytext=(cen_x - dlon, cen_y - dlat),
+                    arrowprops=dict(
+                        arrowstyle="<->, head_width=0.4, head_length=0.6",
+                        color="yellow" if highlight_poly_id == current_id else edge_color,
+                        linewidth=2.0 if highlight_poly_id == current_id else 1.2,
+                        mutation_scale=12,
+                    ),
+                    xycoords=ccrs.PlateCarree()._as_mpl_transform(ax),
+                    zorder=zorder + 1,
+                )
 
     # for poly_idx, poly in enumerate(warning_polygons):
     
@@ -782,8 +830,10 @@ else:
 
             mc5, mc6, mc7 = st.columns(3)
             mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
-            mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")
-            mc7.metric("Orientación / Rumbo", f"{poly_data.Rumbo}")
+            mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")         
+            arrow_symbol = rumbo_to_arrow(int(poly_data.Rumbo.replace("°", "")))
+            mc7.metric("Orientación / Rumbo", f"{poly_data.Rumbo}", delta=arrow_symbol)  # delta muestra la flecha y dirección
+            
             
             # # --- Mostrar las métricas del polígono seleccionado ---
             # st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
