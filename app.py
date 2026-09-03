@@ -554,7 +554,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
                                     'CenLat': centroid_lat,
                                     'Area': area_sigmet_km2,
                                     'Escala': categoria_codigo,  # 'IC', 'CC', 'QLCS', 'MCS'
-                                    'Tipo_Desc': categoria_desc, # Nombre completo para la UI
+                                    # 'Tipo_Desc': categoria_desc, # Nombre completo para la UI
                                     'Aspect_Ratio': round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
                                     'EjeMayor_km': hull_info["major_axis_km"],
                                     'EjeMenor_km': hull_info["minor_axis_km"],
@@ -743,21 +743,31 @@ st.image("smn_horizontal_arg-01.jpg", width=250)
 st.title("Producto TS-SIGMET | Dashboard Interactivo ")
 
 # --- Glosario expansible de referencias ---
-with st.expander("⚠️ **Referencia de tipo de tormentas y seguridad operacional**"):
+with st.expander(
+    "⚠️ **Referencia de morfología de tormentas y seguridad operacional**"
+):
     st.markdown("""
-    Esta clasificación categoriza las tormentas según su extensión espacial y su impacto esperado en la gestión del tránsito aéreo:
+    Esta clasificación tipifica los sistemas convectivos a partir de su **morfología radar** (longitud del eje mayor, relación de aspecto y extensión superficial), siguiendo criterios adaptados de la literatura meteorológica (*Parker & Johnson; Gallus et al.*) para la toma de decisiones aeronáuticas y la emisión de mensajes SIGMET:
 
-    *   **CELDA ORDINARIA (CO): 100 a 500 km²**
-        *   **Estructura:** Tormentas individuales o pulsos convectivos de escala local.
-        *   **Impacto operacional:** Obligan a desvíos tácticos cortos. Generalmente, la tripulación puede evadirlas utilizando el radar meteorológico de a bordo y el contacto visual, solicitando alteraciones menores de rumbo al ATC.
+    *   **CELDA AISLADA (IC - Isolated Cell):**
+        *   **Criterio geométrico:** Eje mayor $< 50\\text{ km}$ y relación de aspecto $\\text{L}/\\text{W} < 2.5$.
+        *   **Estructura:** Celdas convectivas ordinarias individuales o tormentas unicelulares/pulsantes de escala local.
+        *   **Impacto operacional:** Desvíos tácticos directos de corto radio. Generalmente resultan sencillas de circunvalar por las tripulaciones mediante el uso del radar de a bordo (RDR) y contacto visual, requiriendo alteraciones mínimas de rumbo autorizadas por el ATC.
     
-    *   **MULTICELULAR (MC): 500 a 1000 km²**
-        *   **Estructura:** Clústeres o agrupaciones de celdas convectivas que interactúan entre sí.
-        *   **Impacto operacional:** Bloquean tramos considerables de aerovías. Requieren ruteos alternativos planificados que aumentan el consumo de combustible y exigen coordinación anticipada con el Control de Tráfico Aéreo.
+    *   **CLÚSTER MULTICELULAR (CC - Cluster of Cells):**
+        *   **Criterio geométrico:** Área $\\ge 400\\text{ km}^2$ o eje mayor $\\ge 50\\text{ km}$, con relación de aspecto no lineal ($\\text{L}/\\text{W} < 3.0$).
+        *   **Estructura:** Agrupaciones convectivas desorganizadas o complejos de múltiples celdas en diferentes etapas de desarrollo que no presentan una alineación rectilínea predominante.
+        *   **Impacto operacional:** Bloqueo de aerovías locales y sectores de aproximación terminal (TMA). Obligan a una navegación táctica compleja entre celdas; la presencia de *gaps* o corredores falsos entre núcleos puede exponer a las aeronaves a turbulencia severa en aire claro y cizalladura de viento (*windshear*).
     
-    *   **SISTEMA CONVECTIVO (SC): > 1000 km²**
-        *   **Estructura:** Sistemas Convectivos de Mesoescala (MCS), Complejos Convectivos (MCC) o Líneas de Inestabilidad (Squall Lines).
-        *   **Impacto operacional:** Disrupción severa del espacio aéreo. Tienen el potencial de bloquear Regiones de Información de Vuelo (FIR) completas, forzando desvíos estratégicos masivos, demoras generalizadas o el cierre temporal de rutas.
+    *   **LÍNEA CONVECTIVA / SISTEMA CUASI-LINEAL (QLCS - Quasi-Linear Convective System):**
+        *   **Criterio geométrico:** Eje mayor $\\ge 100\\text{ km}$ y marcada relación de aspecto ($\\text{L}/\\text{W} \\ge 3.0$).
+        *   **Estructura:** Líneas de inestabilidad (*squall lines*), frentes fríos activos y líneas de turbonada con frentes de ráfagas bien definidos a lo largo de su eje de avance.
+        *   **Impacto operacional:** Bloqueo transversal severo y continuo de rutas y aerovías. La penetración directa a través de la línea está formalmente contraindicada. Exige desvíos estratégicos tempranos alrededor de los extremos de la línea (o esperas operacionales), asociados a severa turbulencia, granizo en niveles de crucero y engelamiento moderado a severo.
+    
+    *   **SISTEMA CONVECTIVO DE MESOESCALA (MCS - Mesoscale Convective System):**
+        *   **Criterio geométrico:** Área del sistema $\\ge 1000\\text{ km}^2$ o extensión combinada con eje mayor $\\ge 100\\text{ km}$ y eje menor $\\ge 40\\text{ km}$.
+        *   **Estructura:** Complejos Convectivos de Mesoescala (MCC) o sistemas convectivos maduros con extensas áreas de nubes de fase mixta y precipitación estratiforme que engloban múltiples núcleos convectivos intensos.
+        *   **Impacto operacional:** Disrupción masiva del espacio aéreo con capacidad de colapsar Regiones de Información de Vuelo (FIR) completas. Provoca desvíos estratégicos interprovinciales, demoras generalizadas en tierra, cierre preventivo de aeródromos por actividad eléctrica generalizada y cimas nubosas que frecuentemente superan el nivel de vuelo FL400.
     """)
 # -------------------------------------------------
 
