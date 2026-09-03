@@ -732,7 +732,7 @@ def plot_interactive_map_streamlit(
 
 st.set_page_config(layout="wide")
 st.image("smn_horizontal_arg-01.jpg", width=250) 
-st.title(":#242C4F[Producto TS-SIGMET | Dashboard Interactivo (EXPERIMENTAL)]")
+st.title(":blue[Producto TS-SIGMET | Dashboard Interactivo (EXPERIMENTAL)]")
 
 # --- Glosario expansible de referencias ---
 with st.expander("⚠️ **Referencia de tipo de tormenta y seguridad operacional**"):
