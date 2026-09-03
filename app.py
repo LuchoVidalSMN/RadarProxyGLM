@@ -633,7 +633,7 @@ def plot_interactive_map_streamlit(
             line_width = 2.5
             zorder = 7
         else:
-            edge_color = "orange"  # Contorno tipo SIGMET
+            edge_color = "#219ebc"  # Contorno tipo SIGMET
             line_width = 1
             zorder = 6
 
