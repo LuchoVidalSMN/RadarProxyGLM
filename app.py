@@ -554,20 +554,20 @@ def load_and_process_data(start_window_datetime, _fs_param):
             max_fl = pressure_to_flight_level(min_ctp)
             
             metrics_list.append({
-                                    'ID': poly_id,
-                                    'CenLon': centroid_lon,
-                                    'CenLat': centroid_lat,
-                                    'Area': area_sigmet_km2,
-                                    'Escala': categoria_codigo,  # 'IC', 'CC', 'QLCS', 'MCS'
-                                    'Tipo_Desc': categoria_desc, # Nombre completo para la UI
-                                    'Aspect_Ratio': round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
-                                    'EjeMayor_km': hull_info["major_axis_km"],
-                                    'EjeMenor_km': hull_info["minor_axis_km"],
-                                    'Rumbo': f"{hull_info['orientation_deg']:03d}°",
-                                    'MaxRef': round(max_reflectivity, 1),
-                                    'MaxFED': round(max_fed, 1),
-                                    'MinCTT': round(min_ir_temp, 1),
-                                    'MaxFL': max_fl,
+                                 'ID': poly_id,
+                                 'CenLon': centroid_lon,
+                                 'CenLat': centroid_lat,
+                                 'Area': area_sigmet_km2,
+                                 'Tipo': categoria_codigo,  # 'IC', 'CC', 'QLCS', 'MCS'
+                                 'Descripcion': categoria_desc, # Nombre completo para la UI
+                                 'Aspect_Ratio': round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
+                                 'EjeMayor_km': hull_info["major_axis_km"],
+                                 'EjeMenor_km': hull_info["minor_axis_km"],
+                                 'Orientacion': f"{hull_info['orientation_deg']:03d}°",
+                                 'MaxRef': round(max_reflectivity, 1),
+                                 'MaxFED': round(max_fed, 1),
+                                 'MinCTT': round(min_ir_temp, 1),
+                                 'MaxFL': max_fl,
                                 })
 
         # Reemplazamos los polígonos originales por las envolturas SIGMET
@@ -605,13 +605,13 @@ def load_and_process_data(start_window_datetime, _fs_param):
 # ============================================================================ #
 
 def plot_interactive_map_streamlit(
-				    warning_polygons, metrics_df, ir_data, x, y, abi_crs,
-				    max_reflectivity_proxy, lon_mesh_high, lat_mesh_high,
-				    lon_min, lon_max, lat_min, lat_max,
-				    paises, fir_ezeiza, fir_cordoba, fir_resistencia, fir_mendoza, fir_comodoro,
-				    df_airports, start_window,
-				    highlight_poly_id=None
-				  ):
+                				       warning_polygons, metrics_df, ir_data, x, y, abi_crs,
+                				       max_reflectivity_proxy, lon_mesh_high, lat_mesh_high,
+                				       lon_min, lon_max, lat_min, lat_max,
+                				       paises, fir_ezeiza, fir_cordoba, fir_resistencia, fir_mendoza, fir_comodoro,
+                				       df_airports, start_window,
+                				       highlight_poly_id=None
+                				      ):
 				  
     fig = plt.figure(figsize=(12, 12))
     ax = fig.add_subplot(111, projection=ccrs.Mercator())
@@ -622,12 +622,12 @@ def plot_interactive_map_streamlit(
     ax.set_extent([lon_min_plot, lon_max_plot, lat_min_plot, lat_max_plot], crs=ccrs.PlateCarree())
     
     if ir_data is not None:
-        im_ir = ax.imshow(
-                          ir_data, origin="upper",
-                          extent=[x.min(), x.max(), y.min(), y.max()],
-                          transform=abi_crs,
-                          cmap="Greys", vmin=-90, vmax=40, zorder=1
-                         )
+        ax.imshow(
+                  ir_data, origin="upper",
+                  extent=[x.min(), x.max(), y.min(), y.max()],
+                  transform=abi_crs,
+                  cmap="Greys", vmin=-90, vmax=40, zorder=1
+                 )
 
     proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 20, max_reflectivity_proxy)
 
@@ -685,23 +685,7 @@ def plot_interactive_map_streamlit(
                            hatch=hatch_pattern,       # <-- Líneas diagonales
                            zorder=zorder
                          )
-
-        # Opcional: Dibujar el ID en el centroide del polígono
-        # centroid = poly.centroid
-        # ax.text(
-        #         centroid.x,
-        #         centroid.y,
-        #         str(current_id),
-        #         color=edge_color,
-        #         fontsize=9,
-        #         weight="bold",
-        #         ha="center",
-        #         va="center",
-        #         transform=ccrs.PlateCarree(),
-        #         zorder=zorder + 1,
-        #        )
         
-        # --- DIBUJAR FLECHA DE ORIENTACIÓN DEL EJE MAYOR ---
         if not metrics_df.empty and current_id in metrics_df["ID"].values:
             
             row_poly = metrics_df[metrics_df["ID"] == current_id].iloc[0]
@@ -710,7 +694,7 @@ def plot_interactive_map_streamlit(
             if row_poly.EjeMayor_km >= 100:
                 cen_x = row_poly.CenLon
                 cen_y = row_poly.CenLat
-                rumbo_deg = float(str(row_poly.Rumbo).replace("°", ""))
+                rumbo_deg = float(str(row_poly.Orientacion).replace("°", ""))
 
                 # Semilongitud en grados aproximados para dibujar la flecha
                 # Limitamos la longitud visual para que no tape todo el polígono
@@ -801,38 +785,43 @@ else:
     with col2:
         st.header("Tabla de Advertencias por Tormenta")
 
-        options = [f"ID: {int(row.ID)}, Tipo: {row.Escala}, Tope: FL{int(row.MaxFL):03d}, Area: {int(row.Area)} km²"
+        options = [f"ID: {int(row.ID)}, Tipo: {row.Tipo}, Tope: FL{int(row.MaxFL):03d}, Area: {int(row.Area)} km²"
                    for idx, row in metrics_df.iterrows()]  
         options.insert(0, "-- Seleccionar Polígono --")
 
         selected_option = st.selectbox(
-            "Seleccionar una advertencia para resaltar en el mapa:",
-            options,
-            index=0
-        )
+                                        "Seleccionar una advertencia para resaltar en el mapa:",
+                                        options,
+                                        index=0
+                                      )
            
         highlight_poly_id = None
         if selected_option != "-- Seleccionar Polígono --":
             highlight_poly_id = int(float(selected_option.split(',')[0].replace('ID: ', '')))
             
             st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
-            poly_data = metrics_df[metrics_df["ID"] == highlight_poly_id].iloc[
-                0
-            ]
+            poly_data = metrics_df[metrics_df["ID"] == highlight_poly_id].iloc[0]
 
             mc1, mc2, mc3, mc4 = st.columns(4)
             mc1.metric("Tope (FL)", f"FL{int(poly_data.MaxFL):03d}")
             mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
             mc3.metric("Área Envolvente", f"{poly_data.Area:.0f} km²")
-            mc4.metric("Clasificación", f"{poly_data.Escala}", help=poly_data.Tipo_Desc)
+            mc4.metric("Clasificación", f"{poly_data.Tipo}", help=poly_data.Tipo_Desc)
 
             mc5, mc6, mc7 = st.columns(3)
             mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
             mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")         
-            arrow_symbol = rumbo_to_arrow(int(poly_data.Rumbo.replace("°", "")))
-            mc7.metric("Orientación / Rumbo", f"{poly_data.Rumbo}", delta=arrow_symbol)  # delta muestra la flecha y dirección
+            arrow_symbol = rumbo_to_arrow(int(poly_data.Orientacion.replace("°", "")))
+            mc7.metric("Orientación", f"{poly_data.Rumbo}", delta=arrow_symbol)  # delta muestra la flecha y dirección
 
         st.dataframe(metrics_df, height=600, hide_index=True)
+        
+        st.dataframe(
+                     metrics_df,
+                     column_order=["ID", "Tipo", "Area", "MaxFL", "MaxRef", "MinCTT", "MaxFED"],
+                     height=600,
+                     hide_index=True,
+                    )
 
         if not metrics_df.empty:
             csv_buffer = io.StringIO()
