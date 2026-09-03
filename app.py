@@ -538,7 +538,7 @@ def plot_interactive_map_streamlit(
             cmap="Greys", vmin=-90, vmax=40, zorder=1
         )
 
-    proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 0, max_reflectivity_proxy)
+    proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 5, max_reflectivity_proxy)
 
     im_proxy = ax.pcolormesh(
                              lon_mesh_high, lat_mesh_high, proxy_masked,
