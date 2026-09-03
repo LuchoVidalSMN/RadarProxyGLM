@@ -780,7 +780,7 @@ else:
     if not metrics_df.empty:
         metrics_df = metrics_df.sort_values(by='Area', ascending=False).reset_index(drop=True)
 
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([2, 1])
 
     with col2:
         st.header(":blue[Tabla de Advertencias]")
