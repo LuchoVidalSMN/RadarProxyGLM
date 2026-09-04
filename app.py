@@ -187,7 +187,7 @@ def classify_convective_morphology(area_km2, major_axis_km, minor_axis_km, max_d
 
 # Función para Generar el Gráfico de Coordenadas Paralelas
 def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
-    """Genera un gráfico de coordenadas paralelas con escalas y marcas numéricas en cada eje."""
+    """Genera el gráfico de coordenadas paralelas sincronizado con la selección del polígono."""
     if metrics_df.empty or len(metrics_df) < 2:
         return None
 
@@ -206,7 +206,6 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         "MinCTT",
     ]
 
-    # Nombres legibles para el encabezado superior
     titulos_ejes = [
         "Área\n(km²)",
         "Eje Mayor\n(km)",
@@ -234,18 +233,27 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         "MCS": "#e76f51",
     }
 
-    fig, ax = plt.subplots(figsize=(14, 4))
+    fig, ax = plt.subplots(figsize=(13, 5.2))
 
-    # 1. Dibujar líneas de cada polígono
+    has_selection = (
+        highlight_poly_id is not None
+        and highlight_poly_id in df_norm["ID"].values
+    )
+
+    # 1. Trazar líneas de fondo (no seleccionadas)
     for _, row in df_norm.iterrows():
+        is_highlight = has_selection and (row["ID"] == highlight_poly_id)
+        if is_highlight:
+            continue  # La dibujamos al final para ponerla al frente
+
         y_vals = [row[c] for c in cols_analisis]
-        is_highlight = highlight_poly_id == row["ID"]
+
+        # Si hay algo seleccionado, atenuamos las demás líneas
         line_color = (
-            "red" if is_highlight else color_dict.get(row["Tipo"], "gray")
+            "#ced4da" if has_selection else color_dict.get(row["Tipo"], "gray")
         )
-        line_width = 3.2 if is_highlight else 1.4
-        alpha_val = 1.0 if is_highlight else 0.55
-        z_order = 10 if is_highlight else 3
+        alpha_val = 0.20 if has_selection else 0.55
+        line_width = 1.0 if has_selection else 1.5
 
         ax.plot(
             range(len(cols_analisis)),
@@ -253,78 +261,129 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
             color=line_color,
             linewidth=line_width,
             alpha=alpha_val,
-            zorder=z_order,
+            zorder=2,
         )
 
-    # 2. Dibujar líneas verticales y marcas numéricas en cada eje
-    y_ticks_norm = [0.0, 0.25, 0.5, 0.75, 1.0]
+    # 2. Trazar la línea seleccionada (en primer plano con marcadores y etiquetas)
+    if has_selection:
+        sel_norm = df_norm[df_norm["ID"] == highlight_poly_id].iloc[0]
+        sel_real = df_plot[df_plot["ID"] == highlight_poly_id].iloc[0]
+        y_vals_sel = [sel_norm[c] for c in cols_analisis]
 
+        # Línea principal roja
+        ax.plot(
+            range(len(cols_analisis)),
+            y_vals_sel,
+            color="red",
+            linewidth=3.5,
+            alpha=1.0,
+            zorder=10,
+            marker="o",
+            markersize=7,
+            markerfacecolor="red",
+            markeredgecolor="white",
+            markeredgewidth=1.5,
+        )
+
+        # Rótulos flotantes sobre cada punto con el valor real
+        for i, col in enumerate(cols_analisis):
+            val_real = sel_real[col]
+            label_text = (
+                f"{val_real:.0f}"
+                if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]
+                else f"{val_real:.1f}"
+            )
+            ax.text(
+                i,
+                y_vals_sel[i] + 0.04,
+                label_text,
+                fontsize=9,
+                color="red",
+                fontweight="bold",
+                ha="center",
+                va="bottom",
+                zorder=12,
+                bbox=dict(
+                    boxstyle="round,pad=0.2",
+                    facecolor="white",
+                    edgecolor="red",
+                    alpha=0.85,
+                    linewidth=0.8,
+                ),
+            )
+
+    # 3. Dibujar ejes verticales y marcas numéricas
+    y_ticks_norm = [0.0, 0.25, 0.5, 0.75, 1.0]
     for i, col in enumerate(cols_analisis):
-        # Eje vertical
         ax.axvline(i, color="#adb5bd", linestyle="-", linewidth=1.2, zorder=1)
 
-        # Valores reales correspondientes a cada altura (0%, 25%, 50%, 75%, 100%)
         col_min = mins[col]
         col_max = maxs[col]
-        step_val = (col_max - col_min) / 4.0
 
         for y_norm in y_ticks_norm:
             val_real = col_min + y_norm * (col_max - col_min)
+            label_str = (
+                f"{val_real:.0f}"
+                if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]
+                else f"{val_real:.1f}"
+            )
 
-            # Formateo dinámico según el tipo de variable
-            if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]:
-                label_str = f"{val_real:.0f}"
-            else:
-                label_str = f"{val_real:.1f}"
-
-            # Pequeña marca horizontal en el eje
             ax.plot(
-                    [i - 0.04, i + 0.04],
-                    [y_norm, y_norm],
-                    color="#6c757d",
-                    linewidth=0.8,
-                    zorder=2,
-                   )
-
-            # Texto numérico desplazado a la izquierda del eje
+                [i - 0.03, i + 0.03],
+                [y_norm, y_norm],
+                color="#6c757d",
+                linewidth=0.8,
+                zorder=2,
+            )
             ax.text(
-                    i - 0.06,
-                    y_norm,
-                    label_str,
-                    fontsize=6,
-                    color="#495057",
-                    ha="right",
-                    va="center",
-                    zorder=4,
-                   )
+                i - 0.05,
+                y_norm,
+                label_str,
+                fontsize=8,
+                color="#6c757d",
+                ha="right",
+                va="center",
+                zorder=4,
+            )
 
-    # 3. Configuración estética de la figura
+    # 4. Ajustes estéticos finales
     ax.set_xticks(range(len(cols_analisis)))
-    ax.set_xticklabels(titulos_ejes, fontsize=8, fontweight="bold")
-    ax.set_yticks([])  # Ocultamos la escala normalizada global
+    ax.set_xticklabels(titulos_ejes, fontsize=10, fontweight="bold")
+    ax.set_yticks([])
     ax.set_xlim(-0.35, len(cols_analisis) - 0.65)
-    ax.set_ylim(-0.05, 1.08)
+    ax.set_ylim(-0.06, 1.14)
 
-    # Eliminar bordes de la caja de la figura
     for spine in ["top", "bottom", "left", "right"]:
         ax.spines[spine].set_visible(False)
 
     ax.grid(False)
 
-    # 4. Leyenda de clasificación
+    # Leyenda
     legend_elements = [
-                        Line2D([0], [0], color=col, lw=1, label=tipo)
-                        for tipo, col in color_dict.items()
-                        if tipo in df_norm["Tipo"].values
-                      ]
+        Line2D([0], [0], color=col, lw=2.5, label=tipo)
+        for tipo, col in color_dict.items()
+        if tipo in df_norm["Tipo"].values
+    ]
+    if has_selection:
+        legend_elements.append(
+            Line2D(
+                [0],
+                [0],
+                color="red",
+                lw=3.0,
+                marker="o",
+                label=f"Selección (ID: {highlight_poly_id})",
+            )
+        )
+
     ax.legend(
-                handles=legend_elements,
-                loc="upper right",
-                bbox_to_anchor=(1.0, 1.15),
-                ncol=len(legend_elements),
-                frameon=True,
-                framealpha=0.9,
-             )
+        handles=legend_elements,
+        loc="upper right",
+        bbox_to_anchor=(1.0, 1.15),
+        ncol=len(legend_elements),
+        frameon=True,
+        framealpha=0.9,
+    )
 
     plt.tight_layout()
     return fig
@@ -1003,10 +1062,12 @@ with st.expander("⚠️ ¿Cómo interpretar este gráfico?", expanded=False):
         """)
 
 if not metrics_df.empty and len(metrics_df) >= 2:
-        fig_parallel = plot_parallel_coordinates(metrics_df, highlight_poly_id=highlight_poly_id)
+        fig_parallel = plot_parallel_coordinates(
+                                                 metrics_df, highlight_poly_id=highlight_poly_id
+                                                )
         if fig_parallel is not None:
-            st.pyplot(fig_parallel)
+                  st.pyplot(fig_parallel)
 else:
-        st.info("Se requieren al menos 2 advertencias detectadas para trazar el gráfico de coordenadas paralelas.")
+    st.info("Se requieren al menos 2 advertencias detectadas para trazar el gráfico de coordenadas paralelas.")
     
 # ============================================================================ #
