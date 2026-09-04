@@ -234,7 +234,7 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         "MCS": "#e76f51",
     }
 
-    fig, ax = plt.subplots(figsize=(12, 4))
+    fig, ax = plt.subplots(figsize=(14, 4))
 
     # 1. Dibujar líneas de cada polígono
     for _, row in df_norm.iterrows():
