@@ -1035,19 +1035,19 @@ else:
                 file_name="warning_polygons_metrics.csv",
                 mime="text/csv",
             )
-
+            
     with col1:
         st.header(":blue[Mapa de Advertencias]")
         fig = plot_interactive_map_streamlit(
-		    warning_polygons, metrics_df,
+            warning_polygons, metrics_df,
 		    data["ir_data"], data["x"], data["y"], data["abi_crs"],
 		    data["max_reflectivity_proxy"], data["lon_mesh_high"], data["lat_mesh_high"],
 		    data["lon_min"], data["lon_max"], data["lat_min"], data["lat_max"],
 		    data["paises"], data["fir_ezeiza"], data["fir_cordoba"], data["fir_resistencia"], data["fir_mendoza"], data["fir_comodoro"],
 		    data["df_airports"], data["start_window"],
 		    highlight_poly_id=highlight_poly_id
-		)
-	st.pyplot(fig)
+        )
+        st.pyplot(fig)
       
 # ============================================================================ #
 # 4. Sección de Análisis Multivariado: Parallel Coordinates Plot
