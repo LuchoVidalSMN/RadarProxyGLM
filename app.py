@@ -1047,7 +1047,7 @@ else:
 		    data["df_airports"], data["start_window"],
 		    highlight_poly_id=highlight_poly_id
 		)
-		st.pyplot(fig)
+	st.pyplot(fig)
       
 # ============================================================================ #
 # 4. Sección de Análisis Multivariado: Parallel Coordinates Plot
