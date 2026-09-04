@@ -234,7 +234,7 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         "MCS": "#e76f51",
     }
 
-    fig, ax = plt.subplots(figsize=(13, 5))
+    fig, ax = plt.subplots(figsize=(10, 2))
 
     # 1. Dibujar líneas de cada polígono
     for _, row in df_norm.iterrows():
@@ -261,9 +261,7 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
 
     for i, col in enumerate(cols_analisis):
         # Eje vertical
-        ax.axvline(
-            i, color="#adb5bd", linestyle="-", linewidth=1.2, zorder=1
-        )
+        ax.axvline(i, color="#adb5bd", linestyle="-", linewidth=1.2, zorder=1)
 
         # Valores reales correspondientes a cada altura (0%, 25%, 50%, 75%, 100%)
         col_min = mins[col]
@@ -281,28 +279,28 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
 
             # Pequeña marca horizontal en el eje
             ax.plot(
-                [i - 0.04, i + 0.04],
-                [y_norm, y_norm],
-                color="#6c757d",
-                linewidth=0.8,
-                zorder=2,
-            )
+                    [i - 0.04, i + 0.04],
+                    [y_norm, y_norm],
+                    color="#6c757d",
+                    linewidth=0.8,
+                    zorder=2,
+                   )
 
             # Texto numérico desplazado a la izquierda del eje
             ax.text(
-                i - 0.06,
-                y_norm,
-                label_str,
-                fontsize=8,
-                color="#495057",
-                ha="right",
-                va="center",
-                zorder=4,
-            )
+                    i - 0.06,
+                    y_norm,
+                    label_str,
+                    fontsize=6,
+                    color="#495057",
+                    ha="right",
+                    va="center",
+                    zorder=4,
+                   )
 
     # 3. Configuración estética de la figura
     ax.set_xticks(range(len(cols_analisis)))
-    ax.set_xticklabels(titulos_ejes, fontsize=10, fontweight="bold")
+    ax.set_xticklabels(titulos_ejes, fontsize=8, fontweight="bold")
     ax.set_yticks([])  # Ocultamos la escala normalizada global
     ax.set_xlim(-0.35, len(cols_analisis) - 0.65)
     ax.set_ylim(-0.05, 1.08)
@@ -315,18 +313,18 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
 
     # 4. Leyenda de clasificación
     legend_elements = [
-        Line2D([0], [0], color=col, lw=2.5, label=tipo)
-        for tipo, col in color_dict.items()
-        if tipo in df_norm["Tipo"].values
-    ]
+                        Line2D([0], [0], color=col, lw=2.5, label=tipo)
+                        for tipo, col in color_dict.items()
+                        if tipo in df_norm["Tipo"].values
+                      ]
     ax.legend(
-        handles=legend_elements,
-        loc="upper right",
-        bbox_to_anchor=(1.0, 1.15),
-        ncol=len(legend_elements),
-        frameon=True,
-        framealpha=0.9,
-    )
+                handles=legend_elements,
+                loc="upper right",
+                bbox_to_anchor=(1.0, 1.15),
+                ncol=len(legend_elements),
+                frameon=True,
+                framealpha=0.9,
+             )
 
     plt.tight_layout()
     return fig
@@ -996,13 +994,12 @@ else:
 # 4. Sección de Análisis Multivariado: Parallel Coordinates Plot
 # ============================================================================ #
 st.markdown("---")
-st.subheader(":blue[Análisis Multivariado de Propiedades de Tormenta]")
+st.subheader(":blue[Análisis Multivariado de Propiedades de las Tormentas]")
 
-with st.expander("ℹ️ ¿Cómo interpretar este gráfico?", expanded=False):
+with st.expander("⚠️ ¿Cómo interpretar este gráfico?", expanded=False):
         st.markdown("""
         * **Cada línea representa un polígono SIGMET detectado.**
         * **Color de la línea:** Clasificación morfológica (**IC:** Verde azulado, **CC:** Amarillo, **QLCS:** Naranja, **MCS:** Rojo coral).
-        * **Interactividad:** Puedes **hacer clic y arrastrar verticalmente** sobre cualquiera de los ejes numéricos para filtrar y aislar tormentas (por ejemplo, ver únicamente tormentas con `MaxFL > 380` o `Area > 1000 km²`).
         """)
 
 if not metrics_df.empty and len(metrics_df) >= 2:
