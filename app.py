@@ -22,6 +22,8 @@ from skimage.measure import find_contours
 
 import matplotlib as mpl
 
+import plotly.express as px
+
 # ============================================================================ #
 # 0. Definiciones globales o constantes (fuera de funciones para Streamlit)
 # ============================================================================ #
@@ -182,6 +184,80 @@ def classify_convective_morphology(area_km2, major_axis_km, minor_axis_km, max_d
             "tipo": "Celda Aislada",
             "impacto": "Desvíos tácticos directos de corto radio."
         }
+
+# Función para Generar el Gráfico de Coordenadas Paralelas
+def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
+    """Genera un gráfico interactivo de coordenadas paralelas con las métricas de las tormentas."""
+    if metrics_df.empty or len(metrics_df) < 2:
+        return None
+
+    # Preparamos una copia de trabajo
+    df_plot = metrics_df.copy()
+
+    # Mapeo numérico para colorear según la categoría morfológica
+    tipo_mapping = {"IC": 1, "CC": 2, "QLCS": 3, "MCS": 4}
+    df_plot["Tipo_Num"] = df_plot["Tipo"].map(tipo_mapping).fillna(0)
+
+    # Extraemos el valor numérico de la orientación (eliminando el símbolo '°')
+    df_plot["Orientacion_Num"] = (
+        df_plot["Orientacion"].str.replace("°", "").astype(float)
+    )
+
+    # Columnas numéricas clave a relacionar
+    # (ID, Área, Eje Mayor, Aspect Ratio, Nivel de Vuelo, Reflectividad Máx, Temperatura CTT)
+    dimensions = [
+        dict(range=[df_plot["Area"].min(), df_plot["Area"].max()], label="Área (km²)", values=df_plot["Area"]),
+        dict(range=[df_plot["EjeMayor_km"].min(), df_plot["EjeMayor_km"].max()], label="Eje Mayor (km)", values=df_plot["EjeMayor_km"]),
+        dict(range=[df_plot["Aspect_Ratio"].min(), df_plot["Aspect_Ratio"].max()], label="Relación Aspecto", values=df_plot["Aspect_Ratio"]),
+        dict(range=[df_plot["Orientacion_Num"].min(), df_plot["Orientacion_Num"].max()], label="Orientación (°)", values=df_plot["Orientacion_Num"]),
+        dict(range=[df_plot["MaxFL"].min(), df_plot["MaxFL"].max()], label="Tope (FL)", values=df_plot["MaxFL"]),
+        dict(range=[df_plot["MaxRef"].min(), df_plot["MaxRef"].max()], label="Refl. Máx (dBZ)", values=df_plot["MaxRef"]),
+        dict(range=[df_plot["MinCTT"].min(), df_plot["MinCTT"].max()], label="Tope CTT (°C)", values=df_plot["MinCTT"]),
+    ]
+
+    fig = px.parallel_coordinates(
+        df_plot,
+        color="Tipo_Num",
+        dimensions=[
+            "Area",
+            "EjeMayor_km",
+            "Aspect_Ratio",
+            "Orientacion_Num",
+            "MaxFL",
+            "MaxRef",
+            "MinCTT",
+        ],
+        labels={
+            "Area": "Área (km²)",
+            "EjeMayor_km": "Eje Mayor (km)",
+            "Aspect_Ratio": "Relación Aspecto",
+            "Orientacion_Num": "Rumbo (°)",
+            "MaxFL": "Tope (FL)",
+            "MaxRef": "Refl. Máx (dBZ)",
+            "MinCTT": "Min CTT (°C)",
+        },
+        color_continuous_scale=[
+            (0.00, "#2a9d8f"),  # IC: Verde azulado
+            (0.33, "#e9c46a"),  # CC: Amarillo
+            (0.66, "#f4a261"),  # QLCS: Naranja
+            (1.00, "#e76f51"),  # MCS: Rojo coral
+        ],
+        range_color=[1, 4],
+    )
+
+    fig.update_layout(
+        coloraxis_colorbar=dict(
+            title="Clasificación",
+            tickvals=[1, 2, 3, 4],
+            ticktext=["IC", "CC", "QLCS", "MCS"],
+            lenmode="pixels",
+            len=200,
+        ),
+        margin=dict(l=60, r=40, t=50, b=40),
+        height=380,
+    )
+
+    return fig
 
 # ============================================================================ #
 # 1. Funciones auxiliares de carga y procesamiento (Cacheables con Streamlit)
@@ -843,6 +919,25 @@ else:
             highlight_poly_id=highlight_poly_id
         )
         st.pyplot(fig)
-        
+      
 # ============================================================================ #
-        
+# 4. Sección de Análisis Multivariado: Parallel Coordinates Plot
+# ============================================================================ #
+st.markdown("---")
+st.subheader(":blue[Análisis Multivariado de Propiedades de Tormenta]")
+
+with st.expander("ℹ️ ¿Cómo interpretar este gráfico?", expanded=False):
+        st.markdown("""
+        * **Cada línea representa un polígono SIGMET detectado.**
+        * **Color de la línea:** Clasificación morfológica (**IC:** Verde azulado, **CC:** Amarillo, **QLCS:** Naranja, **MCS:** Rojo coral).
+        * **Interactividad:** Puedes **hacer clic y arrastrar verticalmente** sobre cualquiera de los ejes numéricos para filtrar y aislar tormentas (por ejemplo, ver únicamente tormentas con `MaxFL > 380` o `Area > 1000 km²`).
+        """)
+
+if not metrics_df.empty and len(metrics_df) >= 2:
+        fig_parallel = plot_parallel_coordinates(metrics_df, highlight_poly_id=highlight_poly_id)
+        if fig_parallel is not None:
+            st.plotly_chart(fig_parallel, use_container_width=True)
+else:
+        st.info("Se requieren al menos 2 advertencias detectadas para trazar el gráfico de coordenadas paralelas.")
+    
+# ============================================================================ #
