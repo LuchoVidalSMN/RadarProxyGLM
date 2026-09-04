@@ -1022,7 +1022,7 @@ else:
         st.dataframe(
                      metrics_df,
                      column_order=["ID", "Tipo", "Area", "MaxFL", "MaxRef", "MinCTT", "MaxFED"],
-                     height=800,
+                     height=850,
                      hide_index=True,
                     )
 
