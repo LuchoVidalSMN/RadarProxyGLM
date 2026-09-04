@@ -319,7 +319,7 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
                       ]
     ax.legend(
                 handles=legend_elements,
-                loc="upper center",
+                loc="upper right",
                 bbox_to_anchor=(1.0, 1.15),
                 ncol=len(legend_elements),
                 frameon=True,
