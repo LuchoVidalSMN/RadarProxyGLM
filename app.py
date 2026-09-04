@@ -187,76 +187,96 @@ def classify_convective_morphology(area_km2, major_axis_km, minor_axis_km, max_d
 
 # Función para Generar el Gráfico de Coordenadas Paralelas
 def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
-    """Genera un gráfico interactivo de coordenadas paralelas con las métricas de las tormentas."""
+    """Genera un gráfico de coordenadas paralelas usando Matplotlib (no requiere WebGL)."""
     if metrics_df.empty or len(metrics_df) < 2:
         return None
 
-    # Preparamos una copia de trabajo
+    # Preparamos los datos
     df_plot = metrics_df.copy()
-
-    # Mapeo numérico para colorear según la categoría morfológica
-    tipo_mapping = {"IC": 1, "CC": 2, "QLCS": 3, "MCS": 4}
-    df_plot["Tipo_Num"] = df_plot["Tipo"].map(tipo_mapping).fillna(0)
-
-    # Extraemos el valor numérico de la orientación (eliminando el símbolo '°')
     df_plot["Orientacion_Num"] = (
         df_plot["Orientacion"].str.replace("°", "").astype(float)
     )
 
-    # Columnas numéricas clave a relacionar
-    # (ID, Área, Eje Mayor, Aspect Ratio, Nivel de Vuelo, Reflectividad Máx, Temperatura CTT)
-    dimensions = [
-        dict(range=[df_plot["Area"].min(), df_plot["Area"].max()], label="Área (km²)", values=df_plot["Area"]),
-        dict(range=[df_plot["EjeMayor_km"].min(), df_plot["EjeMayor_km"].max()], label="Eje Mayor (km)", values=df_plot["EjeMayor_km"]),
-        dict(range=[df_plot["Aspect_Ratio"].min(), df_plot["Aspect_Ratio"].max()], label="Relación Aspecto", values=df_plot["Aspect_Ratio"]),
-        dict(range=[df_plot["Orientacion_Num"].min(), df_plot["Orientacion_Num"].max()], label="Orientación (°)", values=df_plot["Orientacion_Num"]),
-        dict(range=[df_plot["MaxFL"].min(), df_plot["MaxFL"].max()], label="Tope (FL)", values=df_plot["MaxFL"]),
-        dict(range=[df_plot["MaxRef"].min(), df_plot["MaxRef"].max()], label="Refl. Máx (dBZ)", values=df_plot["MaxRef"]),
-        dict(range=[df_plot["MinCTT"].min(), df_plot["MinCTT"].max()], label="Tope CTT (°C)", values=df_plot["MinCTT"]),
+    cols_analisis = [
+        "Area",
+        "EjeMayor_km",
+        "Aspect_Ratio",
+        "Orientacion_Num",
+        "MaxFL",
+        "MaxRef",
+        "MinCTT",
     ]
 
-    fig = px.parallel_coordinates(
-        df_plot,
-        color="Tipo_Num",
-        dimensions=[
-            "Area",
-            "EjeMayor_km",
-            "Aspect_Ratio",
-            "Orientacion_Num",
-            "MaxFL",
-            "MaxRef",
-            "MinCTT",
-        ],
-        labels={
-            "Area": "Área (km²)",
-            "EjeMayor_km": "Eje Mayor (km)",
-            "Aspect_Ratio": "Relación Aspecto",
-            "Orientacion_Num": "Rumbo (°)",
-            "MaxFL": "Tope (FL)",
-            "MaxRef": "Refl. Máx (dBZ)",
-            "MinCTT": "Min CTT (°C)",
-        },
-        color_continuous_scale=[
-            (0.00, "#2a9d8f"),  # IC: Verde azulado
-            (0.33, "#e9c46a"),  # CC: Amarillo
-            (0.66, "#f4a261"),  # QLCS: Naranja
-            (1.00, "#e76f51"),  # MCS: Rojo coral
-        ],
-        range_color=[1, 4],
-    )
+    # Normalización Min-Max (0 a 1) para que los ejes con escalas distintas coincidan visualmente
+    df_norm = df_plot[cols_analisis].copy()
+    mins = df_norm.min()
+    maxs = df_norm.max()
+    # Evitar divisiones por cero si min == max
+    ranges = maxs - mins
+    ranges[ranges == 0] = 1.0
 
-    fig.update_layout(
-        coloraxis_colorbar=dict(
-            title="Clasificación",
-            tickvals=[1, 2, 3, 4],
-            ticktext=["IC", "CC", "QLCS", "MCS"],
-            lenmode="pixels",
-            len=200,
-        ),
-        margin=dict(l=60, r=40, t=50, b=40),
-        height=380,
-    )
+    df_norm = (df_norm - mins) / ranges
+    df_norm["Tipo"] = df_plot["Tipo"]
+    df_norm["ID"] = df_plot["ID"]
 
+    # Paleta de colores para las clases morfológicas
+    color_dict = {
+        "IC": "#2a9d8f",
+        "CC": "#e9c46a",
+        "QLCS": "#f4a261",
+        "MCS": "#e76f51",
+    }
+
+    fig, ax = plt.subplots(figsize=(12, 4.5))
+
+    # Trazar cada tormenta
+    for _, row in df_norm.iterrows():
+        y_vals = [row[c] for c in cols_analisis]
+        is_highlight = highlight_poly_id == row["ID"]
+        line_color = "red" if is_highlight else color_dict.get(row["Tipo"], "gray")
+        line_width = 3.0 if is_highlight else 1.5
+        alpha_val = 1.0 if is_highlight else 0.65
+        z_order = 10 if is_highlight else 3
+
+        ax.plot(
+            range(len(cols_analisis)),
+            y_vals,
+            color=line_color,
+            linewidth=line_width,
+            alpha=alpha_val,
+            zorder=z_order,
+        )
+
+    # Configurar líneas verticales de los ejes
+    for i in range(len(cols_analisis)):
+        ax.axvline(i, color="lightgray", linestyle="--", linewidth=0.8, zorder=1)
+
+    # Etiquetas de los ejes con sus valores mínimo y máximo reales
+    etiquetas_ejes = [
+        f"Área\n[{mins['Area']:.0f} - {maxs['Area']:.0f}]",
+        f"Eje Mayor\n[{mins['EjeMayor_km']:.0f} - {maxs['EjeMayor_km']:.0f}]",
+        f"Aspect Ratio\n[{mins['Aspect_Ratio']:.1f} - {maxs['Aspect_Ratio']:.1f}]",
+        f"Rumbo\n[{mins['Orientacion_Num']:.0f}° - {maxs['Orientacion_Num']:.0f}°]",
+        f"Tope FL\n[{mins['MaxFL']:.0f} - {maxs['MaxFL']:.0f}]",
+        f"Refl. Máx\n[{mins['MaxRef']:.1f} - {maxs['MaxRef']:.1f}]",
+        f"Min CTT\n[{mins['MinCTT']:.1f} - {maxs['MinCTT']:.1f}]",
+    ]
+
+    ax.set_xticks(range(len(cols_analisis)))
+    ax.set_xticklabels(etiquetas_ejes, fontsize=10)
+    ax.set_yticks([])  # Ocultar marcas Y normalizadas
+    ax.grid(False)
+
+    # Leyenda de categorías
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], color=col, lw=2.5, label=tipo)
+        for tipo, col in color_dict.items()
+        if tipo in df_norm["Tipo"].values
+    ]
+    ax.legend(handles=legend_elements, loc="upper right", framealpha=0.9)
+
+    plt.tight_layout()
     return fig
 
 # ============================================================================ #
@@ -936,7 +956,7 @@ with st.expander("ℹ️ ¿Cómo interpretar este gráfico?", expanded=False):
 if not metrics_df.empty and len(metrics_df) >= 2:
         fig_parallel = plot_parallel_coordinates(metrics_df, highlight_poly_id=highlight_poly_id)
         if fig_parallel is not None:
-            st.plotly_chart(fig_parallel, use_container_width=True)
+            st.pyplot(fig_parallel)
 else:
         st.info("Se requieren al menos 2 advertencias detectadas para trazar el gráfico de coordenadas paralelas.")
     
