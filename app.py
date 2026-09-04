@@ -234,7 +234,7 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         "MCS": "#e76f51",
     }
 
-    fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=(12, 4))
 
     # 1. Dibujar líneas de cada polígono
     for _, row in df_norm.iterrows():
@@ -313,7 +313,7 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
 
     # 4. Leyenda de clasificación
     legend_elements = [
-                        Line2D([0], [0], color=col, lw=2.5, label=tipo)
+                        Line2D([0], [0], color=col, lw=1, label=tipo)
                         for tipo, col in color_dict.items()
                         if tipo in df_norm["Tipo"].values
                       ]
