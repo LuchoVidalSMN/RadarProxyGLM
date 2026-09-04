@@ -5,7 +5,7 @@ import s3fs
 import numpy as np
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
+
 from netCDF4 import Dataset
 from datetime import datetime, timedelta
 
@@ -16,13 +16,13 @@ from cartopy.feature import ShapelyFeature
 from shapely.geometry import Point, Polygon, box
 
 from scipy.ndimage import gaussian_filter, label
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.colors import ListedColormap, BoundaryNorm
 
 from skimage.measure import find_contours
-
-import matplotlib as mpl
-
-import plotly.express as px
 
 # ============================================================================ #
 # 0. Definiciones globales o constantes (fuera de funciones para Streamlit)
@@ -187,11 +187,10 @@ def classify_convective_morphology(area_km2, major_axis_km, minor_axis_km, max_d
 
 # Función para Generar el Gráfico de Coordenadas Paralelas
 def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
-    """Genera un gráfico de coordenadas paralelas usando Matplotlib (no requiere WebGL)."""
+    """Genera un gráfico de coordenadas paralelas con escalas y marcas numéricas en cada eje."""
     if metrics_df.empty or len(metrics_df) < 2:
         return None
 
-    # Preparamos los datos
     df_plot = metrics_df.copy()
     df_plot["Orientacion_Num"] = (
         df_plot["Orientacion"].str.replace("°", "").astype(float)
@@ -207,19 +206,27 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         "MinCTT",
     ]
 
-    # Normalización Min-Max (0 a 1) para que los ejes con escalas distintas coincidan visualmente
-    df_norm = df_plot[cols_analisis].copy()
-    mins = df_norm.min()
-    maxs = df_norm.max()
-    # Evitar divisiones por cero si min == max
+    # Nombres legibles para el encabezado superior
+    titulos_ejes = [
+        "Área\n(km²)",
+        "Eje Mayor\n(km)",
+        "Relación\nAspecto",
+        "Rumbo\n(°)",
+        "Tope\n(FL)",
+        "Refl. Máx\n(dBZ)",
+        "Tope CTT\n(°C)",
+    ]
+
+    mins = df_plot[cols_analisis].min()
+    maxs = df_plot[cols_analisis].max()
     ranges = maxs - mins
     ranges[ranges == 0] = 1.0
 
-    df_norm = (df_norm - mins) / ranges
+    # Normalización Min-Max (0 a 1)
+    df_norm = (df_plot[cols_analisis] - mins) / ranges
     df_norm["Tipo"] = df_plot["Tipo"]
     df_norm["ID"] = df_plot["ID"]
 
-    # Paleta de colores para las clases morfológicas
     color_dict = {
         "IC": "#2a9d8f",
         "CC": "#e9c46a",
@@ -227,15 +234,17 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         "MCS": "#e76f51",
     }
 
-    fig, ax = plt.subplots(figsize=(12, 4.5))
+    fig, ax = plt.subplots(figsize=(13, 5))
 
-    # Trazar cada tormenta
+    # 1. Dibujar líneas de cada polígono
     for _, row in df_norm.iterrows():
         y_vals = [row[c] for c in cols_analisis]
         is_highlight = highlight_poly_id == row["ID"]
-        line_color = "red" if is_highlight else color_dict.get(row["Tipo"], "gray")
-        line_width = 3.0 if is_highlight else 1.5
-        alpha_val = 1.0 if is_highlight else 0.65
+        line_color = (
+            "red" if is_highlight else color_dict.get(row["Tipo"], "gray")
+        )
+        line_width = 3.2 if is_highlight else 1.4
+        alpha_val = 1.0 if is_highlight else 0.55
         z_order = 10 if is_highlight else 3
 
         ax.plot(
@@ -247,34 +256,77 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
             zorder=z_order,
         )
 
-    # Configurar líneas verticales de los ejes
-    for i in range(len(cols_analisis)):
-        ax.axvline(i, color="lightgray", linestyle="--", linewidth=0.8, zorder=1)
+    # 2. Dibujar líneas verticales y marcas numéricas en cada eje
+    y_ticks_norm = [0.0, 0.25, 0.5, 0.75, 1.0]
 
-    # Etiquetas de los ejes con sus valores mínimo y máximo reales
-    etiquetas_ejes = [
-        f"Área\n[{mins['Area']:.0f} - {maxs['Area']:.0f}]",
-        f"Eje Mayor\n[{mins['EjeMayor_km']:.0f} - {maxs['EjeMayor_km']:.0f}]",
-        f"Aspect Ratio\n[{mins['Aspect_Ratio']:.1f} - {maxs['Aspect_Ratio']:.1f}]",
-        f"Rumbo\n[{mins['Orientacion_Num']:.0f}° - {maxs['Orientacion_Num']:.0f}°]",
-        f"Tope FL\n[{mins['MaxFL']:.0f} - {maxs['MaxFL']:.0f}]",
-        f"Refl. Máx\n[{mins['MaxRef']:.1f} - {maxs['MaxRef']:.1f}]",
-        f"Min CTT\n[{mins['MinCTT']:.1f} - {maxs['MinCTT']:.1f}]",
-    ]
+    for i, col in enumerate(cols_analisis):
+        # Eje vertical
+        ax.axvline(
+            i, color="#adb5bd", linestyle="-", linewidth=1.2, zorder=1
+        )
 
+        # Valores reales correspondientes a cada altura (0%, 25%, 50%, 75%, 100%)
+        col_min = mins[col]
+        col_max = maxs[col]
+        step_val = (col_max - col_min) / 4.0
+
+        for y_norm in y_ticks_norm:
+            val_real = col_min + y_norm * (col_max - col_min)
+
+            # Formateo dinámico según el tipo de variable
+            if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]:
+                label_str = f"{val_real:.0f}"
+            else:
+                label_str = f"{val_real:.1f}"
+
+            # Pequeña marca horizontal en el eje
+            ax.plot(
+                [i - 0.04, i + 0.04],
+                [y_norm, y_norm],
+                color="#6c757d",
+                linewidth=0.8,
+                zorder=2,
+            )
+
+            # Texto numérico desplazado a la izquierda del eje
+            ax.text(
+                i - 0.06,
+                y_norm,
+                label_str,
+                fontsize=8,
+                color="#495057",
+                ha="right",
+                va="center",
+                zorder=4,
+            )
+
+    # 3. Configuración estética de la figura
     ax.set_xticks(range(len(cols_analisis)))
-    ax.set_xticklabels(etiquetas_ejes, fontsize=10)
-    ax.set_yticks([])  # Ocultar marcas Y normalizadas
+    ax.set_xticklabels(titulos_ejes, fontsize=10, fontweight="bold")
+    ax.set_yticks([])  # Ocultamos la escala normalizada global
+    ax.set_xlim(-0.35, len(cols_analisis) - 0.65)
+    ax.set_ylim(-0.05, 1.08)
+
+    # Eliminar bordes de la caja de la figura
+    for spine in ["top", "bottom", "left", "right"]:
+        ax.spines[spine].set_visible(False)
+
     ax.grid(False)
 
-    # Leyenda de categorías
-    from matplotlib.lines import Line2D
+    # 4. Leyenda de clasificación
     legend_elements = [
         Line2D([0], [0], color=col, lw=2.5, label=tipo)
         for tipo, col in color_dict.items()
         if tipo in df_norm["Tipo"].values
     ]
-    ax.legend(handles=legend_elements, loc="upper right", framealpha=0.9)
+    ax.legend(
+        handles=legend_elements,
+        loc="upper right",
+        bbox_to_anchor=(1.0, 1.15),
+        ncol=len(legend_elements),
+        frameon=True,
+        framealpha=0.9,
+    )
 
     plt.tight_layout()
     return fig
