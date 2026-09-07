@@ -1038,8 +1038,8 @@ else:
             st.markdown(
                         f"""
                         <div style="background-color: #ffebee; border-left: 5px solid #d32f2f; padding: 10px 14px; border-radius: 4px; margin-top: 10px; margin-bottom: 12px;">
-                            <span style="color: #b71c1c; font-weight: bold; font-size: 20px;">🚨 IMPACTO OPERACIONAL:</span>
-                            <p style="color: #c62828; margin: 4px 0 0 0; font-size: 16px;">{poly_data.Impacto}</p>
+                            <span style="color: #b71c1c; font-weight: bold; font-size: 20px;">🚨 IMPACTO OPERACIONAL</span>
+                            <p style="color: #c62828; margin: 4px 0 0 0; font-size: 18px;">{poly_data.Impacto}</p>
                         </div>
                         """,
                         unsafe_allow_html=True
