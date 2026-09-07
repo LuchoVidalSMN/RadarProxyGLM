@@ -171,36 +171,36 @@ def classify_convective_morphology(area_km2, major_axis_km, minor_axis_km, max_d
     # Longitud significativa y eje mayor claramente dominante frente al eje menor
     if major_axis_km >= 100.0 and aspect_ratio >= 3.0:
         return {
-            "codigo": "QLCS",
-            "tipo": "Línea Convectiva (QLCS)",
-            "impacto": "Bloqueo transversal extenso; frentes de ráfaga y turbulencia severa lineal."
-        }
+                "codigo": "QLCS",
+                "tipo": "Quasi-Linear Convective System / Squall Line (Línea Convectiva)",
+                "impacto": "Bloqueo transversal extenso; frentes de ráfaga y turbulencia severa lineal."
+               }
 
     # 2. Sistemas Convectivos de Mesoescala no lineales:
     # Gran cobertura areal y gran extensión en ambas dimensiones
     elif area_km2 >= 1000.0 or (major_axis_km >= 100.0 and minor_axis_km >= 40.0):
         return {
-            "codigo": "MCS",
-            "tipo": "Sistema Convectivo (MCS)",
-            "impacto": "Disrupción a gran escala; desvíos estratégicos interprovinciales."
-        }
+                "codigo": "MCS",
+                "tipo": "Mesoscale Convective System (Sistema Convectivo de Mesoescala)",
+                "impacto": "Disrupción a gran escala; desvíos estratégicos interprovinciales."
+               }
 
     # 3. Clúster Convectivo Multicelular:
     # Área intermedia o moderada sin eje lineal marcado
     elif area_km2 >= 400.0 or major_axis_km >= 50.0:
         return {
-            "codigo": "CC",
-            "tipo": "Clúster Multicelular",
-            "impacto": "Bloqueo de aerovías locales; navegación táctica compleja entre celdas."
-        }
+                "codigo": "CC",
+                "tipo": "Cluster of Cells (Clúster Convectivo Multicelular)",
+                "impacto": "Bloqueo de aerovías locales; navegación táctica compleja entre celdas."
+               }
 
     # 4. Celda aislada / pulso ordinario:
     else:
         return {
-            "codigo": "IC",
-            "tipo": "Celda Aislada",
-            "impacto": "Desvíos tácticos directos de corto radio."
-        }
+                "codigo": "IC",
+                "tipo": "Isolated Cell (Celda Individual / Celda Aislada)",
+                "impacto": "Desvíos tácticos directos de corto radio."
+               }
 
 # Función para Generar el Gráfico de Coordenadas Paralelas
 def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
@@ -209,9 +209,7 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         return None
 
     df_plot = metrics_df.copy()
-    df_plot["Orientacion_Num"] = (
-        df_plot["Orientacion"].str.replace("°", "").astype(float)
-    )
+    df_plot["Orientacion_Num"] = (df_plot["Orientacion"].str.replace("°", "").astype(float))
 
     cols_analisis = [
                      "Area",
@@ -246,18 +244,18 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
     df_norm["ID"] = df_plot["ID"]
 
     color_dict = {
-        "IC": "#2a9d8f",
-        "CC": "#e9c46a",
-        "QLCS": "#f4a261",
-        "MCS": "#e76f51",
-    }
+                  "IC": "#2a9d8f",
+                  "CC": "#e9c46a",
+                  "QLCS": "#f4a261",
+                  "MCS": "#e76f51",
+                 }
 
     fig, ax = plt.subplots(figsize=(13, 5.2))
 
     has_selection = (
-        highlight_poly_id is not None
-        and highlight_poly_id in df_norm["ID"].values
-    )
+                     highlight_poly_id is not None
+                     and highlight_poly_id in df_norm["ID"].values
+                    )
 
     # 1. Trazar líneas de fondo (no seleccionadas)
     for _, row in df_norm.iterrows():
@@ -268,20 +266,18 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         y_vals = [row[c] for c in cols_analisis]
 
         # Si hay algo seleccionado, atenuamos las demás líneas
-        line_color = (
-            "#ced4da" if has_selection else color_dict.get(row["Tipo"], "gray")
-        )
+        line_color = ("#ced4da" if has_selection else color_dict.get(row["Tipo"], "gray"))
         alpha_val = 0.20 if has_selection else 0.55
         line_width = 1.0 if has_selection else 1.5
 
         ax.plot(
-            range(len(cols_analisis)),
-            y_vals,
-            color=line_color,
-            linewidth=line_width,
-            alpha=alpha_val,
-            zorder=2,
-        )
+                range(len(cols_analisis)),
+                y_vals,
+                color=line_color,
+                linewidth=line_width,
+                alpha=alpha_val,
+                zorder=2,
+               )
 
     # 2. Trazar la línea seleccionada (en primer plano con marcadores y etiquetas)
     if has_selection:
@@ -323,12 +319,12 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
                     va="bottom",
                     zorder=12,
                     bbox=dict(
-                        boxstyle="round,pad=0.2",
-                        facecolor="white",
-                        edgecolor="red",
-                        alpha=0.85,
-                        linewidth=0.8,
-                    ),
+                              boxstyle="round,pad=0.2",
+                              facecolor="white",
+                              edgecolor="red",
+                              alpha=0.85,
+                              linewidth=0.8,
+                             ),
                    )
 
     # 3. Dibujar ejes verticales y marcas numéricas
@@ -763,6 +759,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
                                                   )
             categoria_codigo = clasi["codigo"]
             categoria_desc   = clasi["tipo"]
+            categoria_impacto = clasi["impacto"]
             # --------------------------------------------         
 
             min_ctp = np.min(ctp_values_in_poly) if ctp_values_in_poly else np.nan
@@ -776,6 +773,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
                                  'Area': area_sigmet_km2,
                                  'Tipo': categoria_codigo,  # 'IC', 'CC', 'QLCS', 'MCS'
                                  'Descripcion': categoria_desc, # Nombre completo para la UI
+                                 'Impacto': categoria_impacto,
                                  'Aspect_Ratio': round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
                                  'EjeMayor_km': hull_info["major_axis_km"],
                                  'EjeMenor_km': hull_info["minor_axis_km"],
@@ -1021,7 +1019,7 @@ else:
 
             mc1, mc2, mc3, mc4 = st.columns(4)
             mc1.metric(
-                       "Tope Nuboso",
+                       "Tope Máximo",
                        f"FL{int(poly_data.MaxFL):03d}",
                        delta=f"{poly_data.MaxH:.1f} km",
                        delta_color="off",
@@ -1035,6 +1033,17 @@ else:
             mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")         
             arrow_symbol = rumbo_to_arrow(int(poly_data.Orientacion.replace("°", "")))
             mc7.metric("Orientación", f"{poly_data.Orientacion}", delta=arrow_symbol)  # delta muestra la flecha y dirección
+            
+            # Impacto Operacional Resaltado
+            st.markdown(
+                        f"""
+                        <div style="background-color: #ffebee; border-left: 5px solid #d32f2f; padding: 10px 14px; border-radius: 4px; margin-top: 10px; margin-bottom: 12px;">
+                            <span style="color: #b71c1c; font-weight: bold; font-size: 13px;">🚨 IMPACTO OPERACIONAL ({poly_data.Tipo}):</span>
+                            <p style="color: #c62828; margin: 4px 0 0 0; font-size: 13px;">{poly_data.Impacto}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                       )
         
         st.dataframe(
                      metrics_df,
