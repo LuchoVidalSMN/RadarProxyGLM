@@ -218,7 +218,7 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
                      "EjeMayor_km",
                      "Aspect_Ratio",
                      "Orientacion_Num",
-                     "MaxH_km",
+                     "MaxH",
                      "MaxFL",
                      "MaxRef",
                      "MinCTT",
@@ -784,7 +784,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
                                  'MaxFED': round(max_fed, 1),
                                  'MinCTT': round(min_ir_temp, 1),
                                  'MaxFL': max_fl,
-                                 "MaxH_km": max_h_km,
+                                 "MaxH": max_h_km,
                                 })
 
         # Reemplazamos los polígonos originales por las envolturas SIGMET
@@ -1023,7 +1023,7 @@ else:
             mc1.metric(
                        "Tope Nuboso",
                        f"FL{int(poly_data.MaxFL):03d}",
-                       delta=f"{poly_data.MaxH_km:.1f} km",
+                       delta=f"{poly_data.MaxH:.1f} km",
                        delta_color="off",
                       )
             mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
@@ -1038,7 +1038,7 @@ else:
         
         st.dataframe(
                      metrics_df,
-                     column_order=["ID", "Tipo", "Area", "MaxH_km", "MaxFL", "MaxRef", "MinCTT", "MaxFED"],
+                     column_order=["ID", "Tipo", "Area", "MaxH", "MaxFL", "MaxRef", "MinCTT", "MaxFED"],
                      height=800,
                      hide_index=True,
                     )
