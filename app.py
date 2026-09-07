@@ -45,6 +45,23 @@ norm_aviation = BoundaryNorm(levels_aviation, cmap_aviation.N)
 # Inicializar S3FileSystem una vez globalmente
 fs_global = s3fs.S3FileSystem(anon=True)
 
+# Calcula altura del tope a partir del valor minimo de presión del tope nuboso
+def pressure_to_altitude_km(p_hpa):
+    """Convierte presión (hPa) a Altitud en kilómetros (km) según la atmósfera estándar ISA"""
+    if p_hpa <= 0 or np.isnan(p_hpa) or np.ma.is_masked(p_hpa):
+        return np.nan
+
+    # Troposfera (hasta ~11 km / 226.32 hPa)
+    if p_hpa > 226.32:
+        alt_ft = 145366.45 * (1 - (p_hpa / 1013.25) ** 0.190284)
+    # Tropopausa / Baja Estratosfera (por encima de ~11 km)
+    else:
+        alt_ft = 36089.24 - 20805.7 * np.log(p_hpa / 226.32)
+
+    # Conversión de pies a kilómetros (1 ft = 0.0003048 km)
+    alt_km = (alt_ft * 0.3048) / 1000.0
+    return round(alt_km, 1)
+
 # Calcula nivel de vuelo (FL) a partir del valor minimo de presión del tope nuboso
 def pressure_to_flight_level(p_hpa):
     """Convierte presión (hPa) a Nivel de Vuelo (FL) según la atmósfera estándar ISA"""
@@ -197,24 +214,26 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
     )
 
     cols_analisis = [
-        "Area",
-        "EjeMayor_km",
-        "Aspect_Ratio",
-        "Orientacion_Num",
-        "MaxFL",
-        "MaxRef",
-        "MinCTT",
-    ]
+                     "Area",
+                     "EjeMayor_km",
+                     "Aspect_Ratio",
+                     "Orientacion_Num",
+                     "MaxH_km",
+                     "MaxFL",
+                     "MaxRef",
+                     "MinCTT",
+                    ]
 
     titulos_ejes = [
-        "Área\n(km²)",
-        "Eje Mayor\n(km)",
-        "Relación\nAspecto",
-        "Rumbo\n(°)",
-        "Tope\n(FL)",
-        "Refl. Máx\n(dBZ)",
-        "Tope CTT\n(°C)",
-    ]
+                    "Área\n(km²)",
+                    "Eje Mayor\n(km)",
+                    "Relación\nAspecto",
+                    "Rumbo\n(°)",
+                    "Tope\n(km)",
+                    "Tope\n(FL)",
+                    "Refl. Máx\n(dBZ)",
+                    "Tope CTT\n(°C)",
+                   ]
 
     mins = df_plot[cols_analisis].min()
     maxs = df_plot[cols_analisis].max()
@@ -272,45 +291,45 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
 
         # Línea principal roja
         ax.plot(
-            range(len(cols_analisis)),
-            y_vals_sel,
-            color="red",
-            linewidth=3.5,
-            alpha=1.0,
-            zorder=10,
-            marker="o",
-            markersize=7,
-            markerfacecolor="red",
-            markeredgecolor="white",
-            markeredgewidth=1.5,
-        )
+                range(len(cols_analisis)),
+                y_vals_sel,
+                color="red",
+                linewidth=3.5,
+                alpha=1.0,
+                zorder=10,
+                marker="o",
+                markersize=7,
+                markerfacecolor="red",
+                markeredgecolor="white",
+                markeredgewidth=1.5,
+               )
 
         # Rótulos flotantes sobre cada punto con el valor real
         for i, col in enumerate(cols_analisis):
             val_real = sel_real[col]
             label_text = (
-                f"{val_real:.0f}"
-                if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]
-                else f"{val_real:.1f}"
-            )
+                          f"{val_real:.0f}"
+                          if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]
+                          else f"{val_real:.1f}"
+                         )
             ax.text(
-                i,
-                y_vals_sel[i] + 0.04,
-                label_text,
-                fontsize=9,
-                color="red",
-                fontweight="bold",
-                ha="center",
-                va="bottom",
-                zorder=12,
-                bbox=dict(
-                    boxstyle="round,pad=0.2",
-                    facecolor="white",
-                    edgecolor="red",
-                    alpha=0.85,
-                    linewidth=0.8,
-                ),
-            )
+                    i,
+                    y_vals_sel[i] + 0.04,
+                    label_text,
+                    fontsize=9,
+                    color="red",
+                    fontweight="bold",
+                    ha="center",
+                    va="bottom",
+                    zorder=12,
+                    bbox=dict(
+                        boxstyle="round,pad=0.2",
+                        facecolor="white",
+                        edgecolor="red",
+                        alpha=0.85,
+                        linewidth=0.8,
+                    ),
+                   )
 
     # 3. Dibujar ejes verticales y marcas numéricas
     y_ticks_norm = [0.0, 0.25, 0.5, 0.75, 1.0]
@@ -323,28 +342,28 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
         for y_norm in y_ticks_norm:
             val_real = col_min + y_norm * (col_max - col_min)
             label_str = (
-                f"{val_real:.0f}"
-                if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]
-                else f"{val_real:.1f}"
-            )
+                         f"{val_real:.0f}"
+                         if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]
+                         else f"{val_real:.1f}"
+                        )
 
             ax.plot(
-                [i - 0.03, i + 0.03],
-                [y_norm, y_norm],
-                color="#6c757d",
-                linewidth=0.8,
-                zorder=2,
-            )
+                    [i - 0.03, i + 0.03],
+                    [y_norm, y_norm],
+                    color="#6c757d",
+                    linewidth=0.8,
+                    zorder=2,
+                   )
             ax.text(
-                i - 0.05,
-                y_norm,
-                label_str,
-                fontsize=8,
-                color="#6c757d",
-                ha="right",
-                va="center",
-                zorder=4,
-            )
+                    i - 0.05,
+                    y_norm,
+                    label_str,
+                    fontsize=8,
+                    color="#6c757d",
+                    ha="right",
+                    va="center",
+                    zorder=4,
+                   )
 
     # 4. Ajustes estéticos finales
     ax.set_xticks(range(len(cols_analisis)))
@@ -360,30 +379,30 @@ def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
 
     # Leyenda
     legend_elements = [
-        Line2D([0], [0], color=col, lw=2.5, label=tipo)
-        for tipo, col in color_dict.items()
-        if tipo in df_norm["Tipo"].values
-    ]
+                       Line2D([0], [0], color=col, lw=2.5, label=tipo)
+                       for tipo, col in color_dict.items()
+                       if tipo in df_norm["Tipo"].values
+                      ]
     if has_selection:
         legend_elements.append(
-            Line2D(
-                [0],
-                [0],
-                color="red",
-                lw=3.0,
-                marker="o",
-                label=f"Selección (ID: {highlight_poly_id})",
-            )
-        )
+                               Line2D(
+                                       [0],
+                                       [0],
+                                       color="red",
+                                       lw=3.0,
+                                       marker="o",
+                                       label=f"Selección (ID: {highlight_poly_id})",
+                                     )
+                              )
 
     ax.legend(
-        handles=legend_elements,
-        loc="upper right",
-        bbox_to_anchor=(1.0, 1.15),
-        ncol=len(legend_elements),
-        frameon=True,
-        framealpha=0.9,
-    )
+                handles=legend_elements,
+                loc="upper right",
+                bbox_to_anchor=(1.0, 1.15),
+                ncol=len(legend_elements),
+                frameon=True,
+                framealpha=0.9,
+             )
 
     plt.tight_layout()
     return fig
@@ -746,17 +765,9 @@ def load_and_process_data(start_window_datetime, _fs_param):
             categoria_desc   = clasi["tipo"]
             # --------------------------------------------         
 
-            # # Clasificación por área del Hull
-            # area_sigmet_km2 = hull_info["area_hull_km2"]
-            # if area_sigmet_km2 < 500:
-            #     categoria = "CO"
-            # elif area_sigmet_km2 < 1000:
-            #     categoria = "MC"
-            # else:
-            #     categoria = "SC"
-
             min_ctp = np.min(ctp_values_in_poly) if ctp_values_in_poly else np.nan
             max_fl = pressure_to_flight_level(min_ctp)
+            max_h_km = pressure_to_altitude_km(min_ctp)
             
             metrics_list.append({
                                  'ID': poly_id,
@@ -773,6 +784,7 @@ def load_and_process_data(start_window_datetime, _fs_param):
                                  'MaxFED': round(max_fed, 1),
                                  'MinCTT': round(min_ir_temp, 1),
                                  'MaxFL': max_fl,
+                                 "MaxH_km": max_h_km,
                                 })
 
         # Reemplazamos los polígonos originales por las envolturas SIGMET
@@ -1008,7 +1020,12 @@ else:
             poly_data = metrics_df[metrics_df["ID"] == highlight_poly_id].iloc[0]
 
             mc1, mc2, mc3, mc4 = st.columns(4)
-            mc1.metric("Tope (FL)", f"FL{int(poly_data.MaxFL):03d}")
+            mc1.metric(
+                       "Tope Nuboso",
+                       f"FL{int(poly_data.MaxFL):03d}",
+                       delta=f"{poly_data.MaxH_km:.1f} km",
+                       delta_color="off",
+                      )
             mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
             mc3.metric("Área Envolvente", f"{poly_data.Area:.0f} km²")
             mc4.metric("Clasificación", f"{poly_data.Tipo}", help=poly_data.Descripcion)
@@ -1021,7 +1038,7 @@ else:
         
         st.dataframe(
                      metrics_df,
-                     column_order=["ID", "Tipo", "Area", "MaxFL", "MaxRef", "MinCTT", "MaxFED"],
+                     column_order=["ID", "Tipo", "Area", "MaxH_km", "MaxFL", "MaxRef", "MinCTT", "MaxFED"],
                      height=800,
                      hide_index=True,
                     )
