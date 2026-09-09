@@ -4,7 +4,7 @@
 # ============================================================================ #
 from datetime import datetime, timedelta
 import io
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 # ============================================================================ #
 # 2. Computación científica, acceso a datos y entorno web
@@ -46,10 +46,10 @@ mpl.rcParams["hatch.linewidth"] = 0.8
 
 # Escala de reflectividad aeronáutica y niveles de corte
 AVIATION_COLORS = [
-                    "#00FF00",  # Nivel 1: 20-30 dBZ (Leve)
-                    "#FFFF00",  # Nivel 2: 30-40 dBZ (Moderado)
-                    "#FF0000",  # Nivel 3: 40-50 dBZ (Fuerte)
-                    "#FF00FF",  # Nivel 4: > 50 dBZ (Extremo)
+                   "#00FF00",  # Nivel 1: 20-30 dBZ (Leve)
+                   "#FFFF00",  # Nivel 2: 30-40 dBZ (Moderado)
+                   "#FF0000",  # Nivel 3: 40-50 dBZ (Fuerte)
+                   "#FF00FF",  # Nivel 4: > 50 dBZ (Extremo)
                   ]
 CMAP_AVIATION = ListedColormap(AVIATION_COLORS)
 LEVELS_AVIATION = [20, 30, 40, 50, 65]
@@ -57,25 +57,25 @@ NORM_AVIATION = BoundaryNorm(LEVELS_AVIATION, CMAP_AVIATION.N)
 
 # Parámetros físicos y límites espaciales (Argentina / Cono Sur)
 SPATIAL_BOUNDS = {
-                    "data_lat_min": -47.0,
-                    "data_lat_max": -18.5,
-                    "data_lon_min": -75.5,
-                    "data_lon_max": -37.0,
-                    "plot_lat_min": -45.0,
-                    "plot_lat_max": -19.0,
-                    "plot_lon_min": -75.0,
-                    "plot_lon_max": -50.0,
+                  "data_lat_min": -47.0,
+                  "data_lat_max": -18.5,
+                  "data_lon_min": -75.5,
+                  "data_lon_max": -37.0,
+                  "plot_lat_min": -45.0,
+                  "plot_lat_max": -19.0,
+                  "plot_lon_min": -75.0,
+                  "plot_lon_max": -50.0,
                  }
 
 # Rutas de capas vectoriales operativas
 SHAPEFILE_PATHS = {
-                    "paises": "./data/shp_arg/cartopy/10m_admin_0_countries.shp",
-                    "airports": "./data/fir_txt/FIR_aeropuertos.txt",
-                    "fir_ezeiza": "./data/shp_arg/FIR/FIR_EZEIZA_backup.shp",
-                    "fir_cordoba": "./data/shp_arg/FIR/FIR_CORDOBA.shp",
-                    "fir_resistencia": "./data/shp_arg/FIR/FIR_RESISTENCIA.shp",
-                    "fir_mendoza": "./data/shp_arg/FIR/FIR_MENDOZA.shp",
-                    "fir_comodoro": "./data/shp_arg/FIR/FIR_COMODORO.shp",
+                   "paises": "./data/shp_arg/cartopy/10m_admin_0_countries.shp",
+                   "airports": "./data/fir_txt/FIR_aeropuertos.txt",
+                   "fir_ezeiza": "./data/shp_arg/FIR/FIR_EZEIZA_backup.shp",
+                   "fir_cordoba": "./data/shp_arg/FIR/FIR_CORDOBA.shp",
+                   "fir_resistencia": "./data/shp_arg/FIR/FIR_RESISTENCIA.shp",
+                   "fir_mendoza": "./data/shp_arg/FIR/FIR_MENDOZA.shp",
+                   "fir_comodoro": "./data/shp_arg/FIR/FIR_COMODORO.shp",
                   }
 
 # Conexión persistente de solo lectura para AWS S3
@@ -202,27 +202,27 @@ def classify_convective_morphology(
 
     if major_axis_km >= 100.0 and aspect_ratio >= 3.0:
         return {
-            "codigo": "QLCS",
-            "tipo": "Línea Convectiva (QLCS)",
-            "impacto": "Bloqueo transversal extenso; frentes de ráfaga y turbulencia severa lineal.",
-        }
+                "codigo": "QLCS",
+                "tipo": "Línea Convectiva (QLCS)",
+                "impacto": "Bloqueo transversal extenso; frentes de ráfaga y turbulencia severa lineal.",
+               }
     elif area_km2 >= 1000.0 or (major_axis_km >= 100.0 and minor_axis_km >= 40.0):
         return {
-            "codigo": "MCS",
-            "tipo": "Sistema Convectivo (MCS)",
-            "impacto": "Disrupción a gran escala; desvíos estratégicos interprovinciales.",
-        }
+                "codigo": "MCS",
+                "tipo": "Sistema Convectivo (MCS)",
+                "impacto": "Disrupción a gran escala; desvíos estratégicos interprovinciales.",
+               }
     elif area_km2 >= 400.0 or major_axis_km >= 50.0:
         return {
-            "codigo": "CC",
-            "tipo": "Clúster Multicelular",
-            "impacto": "Bloqueo de aerovías locales; navegación táctica compleja entre celdas.",
-        }
+                "codigo": "CC",
+                "tipo": "Clúster Multicelular",
+                "impacto": "Bloqueo de aerovías locales; navegación táctica compleja entre celdas.",
+               }
     return {
-        "codigo": "IC",
-        "tipo": "Celda Aislada",
-        "impacto": "Desvíos tácticos directos de corto radio.",
-    }
+            "codigo": "IC",
+            "tipo": "Celda Aislada",
+            "impacto": "Desvíos tácticos directos de corto radio.",
+           }
 
 # ============================================================================ #
 # 2. Ingesta y Procesamiento de Datos (Caché Streamlit)
@@ -243,8 +243,7 @@ def detect_goes_bucket(_fs: s3fs.S3FileSystem, target_time: datetime) -> str:
 
 @st.cache_data(ttl=3600)
 def get_glm_files_for_window(
-    _fs: s3fs.S3FileSystem, start_time: datetime, bucket_name: str, minutes: int = 5
-) -> List[str]:
+    _fs: s3fs.S3FileSystem, start_time: datetime, bucket_name: str, minutes: int = 5) -> List[str]:
     """Obtiene la lista de archivos GLM de 20 segundos para la ventana dada."""
     all_files = []
     num_steps = (minutes * 60) // 20
@@ -283,8 +282,7 @@ def cluster_and_get_polygons(
     threshold_dbz: float,
     lon_mesh: np.ndarray,
     lat_mesh: np.ndarray,
-    min_area_km2: float = 100.0,
-) -> List[Polygon]:
+    min_area_km2: float = 100.0,) -> List[Polygon]:
     """Segmenta núcleos convectivos y los transforma en polígonos cerrados."""
     thresholded = reflectivity_data >= threshold_dbz
     labeled_arr, num_features = label(thresholded)
@@ -340,8 +338,7 @@ def load_airport_data(path_csv: str) -> pd.DataFrame:
 
 @st.cache_data(ttl=3600)
 def load_and_process_data(
-    start_window_datetime: datetime, _fs_param: s3fs.S3FileSystem
-) -> Optional[Dict[str, Any]]:
+    start_window_datetime: datetime, _fs_param: s3fs.S3FileSystem) -> Optional[Dict[str, Any]]:
     """Pipeline de ingesta, cálculo proxy y segmentación morfológica."""
     bounds = SPATIAL_BOUNDS
 
@@ -428,15 +425,11 @@ def load_and_process_data(
     mask_fed = fed_smoothed > 0.02
     max_reflectivity_proxy[mask_fed] = 42.2 + 12.4 * np.log10(fed_smoothed[mask_fed])
 
-    lon_mesh, lat_mesh = np.meshgrid(
-        (lon_bins[:-1] + lon_bins[1:]) / 2, (lat_bins[:-1] + lat_bins[1:]) / 2
-    )
+    lon_mesh, lat_mesh = np.meshgrid((lon_bins[:-1] + lon_bins[1:]) / 2, (lat_bins[:-1] + lat_bins[1:]) / 2)
 
     # Segmentación y filtrado espacial
     raw_polys = cluster_and_get_polygons(max_reflectivity_proxy, 25, lon_mesh, lat_mesh)
-    plot_box = box(
-        bounds["plot_lon_min"], bounds["plot_lat_min"], bounds["plot_lon_max"], bounds["plot_lat_max"]
-    )
+    plot_box = box(bounds["plot_lon_min"], bounds["plot_lat_min"], bounds["plot_lon_max"], bounds["plot_lat_max"])
     warning_polygons = [p for p in raw_polys if p.intersects(plot_box)]
 
     metrics_list, sigmet_hulls = [], []
@@ -471,46 +464,44 @@ def load_and_process_data(
         )
 
         metrics_list.append({
-            "ID": poly_id,
-            "CenLon": poly.centroid.x,
-            "CenLat": poly.centroid.y,
-            "Area": hull_info["area_hull_km2"],
-            "Tipo": morph["codigo"],
-            "Descripcion": morph["tipo"],
-            "Impacto": morph["impacto"],
-            "Aspect_Ratio": round(
-                hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2
-            ),
-            "EjeMayor_km": hull_info["major_axis_km"],
-            "EjeMenor_km": hull_info["minor_axis_km"],
-            "Orientacion": f"{hull_info['orientation_deg']:03d}°",
-            "MaxRef": round(max_refl, 1),
-            "MaxFED": round(np.max(fed_vals), 1) if fed_vals else np.nan,
-            "MinCTT": round(np.min(ctt_vals), 1) if ctt_vals else np.nan,
-            "MaxFL": pressure_to_flight_level(min_pres),
-            "MaxH_km": pressure_to_altitude_km(min_pres),
-        })
+                                "ID": poly_id,
+                                "CenLon": poly.centroid.x,
+                                "CenLat": poly.centroid.y,
+                                "Area": hull_info["area_hull_km2"],
+                                "Tipo": morph["codigo"],
+                                "Descripcion": morph["tipo"],
+                                "Impacto": morph["impacto"],
+                                "Aspect_Ratio": round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
+                                "EjeMayor_km": hull_info["major_axis_km"],
+                                "EjeMenor_km": hull_info["minor_axis_km"],
+                                "Orientacion": f"{hull_info['orientation_deg']:03d}°",
+                                "MaxRef": round(max_refl, 1),
+                                "MaxFED": round(np.max(fed_vals), 1) if fed_vals else np.nan,
+                                "MinCTT": round(np.min(ctt_vals), 1) if ctt_vals else np.nan,
+                                "MaxFL": pressure_to_flight_level(min_pres),
+                                "MaxH_km": pressure_to_altitude_km(min_pres),
+                             })
 
     return {
-        "sat_label": sat_label,
-        "warning_polygons": sigmet_hulls,
-        "metrics_df": pd.DataFrame(metrics_list),
-        "ir_data": ir_data,
-        "x": x,
-        "y": y,
-        "abi_crs": abi_crs,
-        "max_reflectivity_proxy": max_reflectivity_proxy,
-        "lon_mesh": lon_mesh,
-        "lat_mesh": lat_mesh,
-        "paises": load_shape_features(SHAPEFILE_PATHS["paises"]),
-        "fir_ezeiza": load_shape_features(SHAPEFILE_PATHS["fir_ezeiza"]),
-        "fir_cordoba": load_shape_features(SHAPEFILE_PATHS["fir_cordoba"]),
-        "fir_resistencia": load_shape_features(SHAPEFILE_PATHS["fir_resistencia"]),
-        "fir_mendoza": load_shape_features(SHAPEFILE_PATHS["fir_mendoza"]),
-        "fir_comodoro": load_shape_features(SHAPEFILE_PATHS["fir_comodoro"]),
-        "df_airports": load_airport_data(SHAPEFILE_PATHS["airports"]),
-        "start_window": start_window_datetime,
-    }
+            "sat_label": sat_label,
+            "warning_polygons": sigmet_hulls,
+            "metrics_df": pd.DataFrame(metrics_list),
+            "ir_data": ir_data,
+            "x": x,
+            "y": y,
+            "abi_crs": abi_crs,
+            "max_reflectivity_proxy": max_reflectivity_proxy,
+            "lon_mesh": lon_mesh,
+            "lat_mesh": lat_mesh,
+            "paises": load_shape_features(SHAPEFILE_PATHS["paises"]),
+            "fir_ezeiza": load_shape_features(SHAPEFILE_PATHS["fir_ezeiza"]),
+            "fir_cordoba": load_shape_features(SHAPEFILE_PATHS["fir_cordoba"]),
+            "fir_resistencia": load_shape_features(SHAPEFILE_PATHS["fir_resistencia"]),
+            "fir_mendoza": load_shape_features(SHAPEFILE_PATHS["fir_mendoza"]),
+            "fir_comodoro": load_shape_features(SHAPEFILE_PATHS["fir_comodoro"]),
+            "df_airports": load_airport_data(SHAPEFILE_PATHS["airports"]),
+            "start_window": start_window_datetime,
+           }
 
 # ============================================================================ #
 # 3. Funciones de Renderizado Gráfico
@@ -534,8 +525,7 @@ def plot_interactive_map_streamlit(
     fir_comodoro: Optional[ShapelyFeature],
     df_airports: pd.DataFrame,
     start_window: datetime,
-    highlight_poly_id: Optional[int] = None,
-) -> plt.Figure:
+    highlight_poly_id: Optional[int] = None,) -> plt.Figure:
     """Renderiza el mapa aeronáutico regional con Cartopy y Matplotlib."""
     fig = plt.figure(figsize=(12, 12))
     ax = fig.add_subplot(111, projection=ccrs.Mercator())
@@ -544,27 +534,27 @@ def plot_interactive_map_streamlit(
 
     if ir_data is not None:
         ax.imshow(
-            ir_data,
-            origin="upper",
-            extent=[x.min(), x.max(), y.min(), y.max()],
-            transform=abi_crs,
-            cmap="Greys",
-            vmin=-90,
-            vmax=40,
-            zorder=1,
-        )
+                    ir_data,
+                    origin="upper",
+                    extent=[x.min(), x.max(), y.min(), y.max()],
+                    transform=abi_crs,
+                    cmap="Greys",
+                    vmin=-90,
+                    vmax=40,
+                    zorder=1,
+                 )
 
     proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 20, max_reflectivity_proxy)
     im_proxy = ax.pcolormesh(
-        lon_mesh,
-        lat_mesh,
-        proxy_masked,
-        cmap=CMAP_AVIATION,
-        norm=NORM_AVIATION,
-        alpha=0.75,
-        transform=ccrs.PlateCarree(),
-        zorder=2,
-    )
+                                lon_mesh,
+                                lat_mesh,
+                                proxy_masked,
+                                cmap=CMAP_AVIATION,
+                                norm=NORM_AVIATION,
+                                alpha=0.75,
+                                transform=ccrs.PlateCarree(),
+                                zorder=2,
+                            )
 
     # Capas vectoriales FIR y división política
     if paises:
@@ -635,8 +625,7 @@ def plot_interactive_map_streamlit(
 
 
 def plot_parallel_coordinates(
-    metrics_df: pd.DataFrame, highlight_poly_id: Optional[int] = None
-) -> Optional[plt.Figure]:
+    metrics_df: pd.DataFrame, highlight_poly_id: Optional[int] = None) -> Optional[plt.Figure]:
     """Genera coordenadas paralelas normalizadas con marcas reales y resaltado dinámico."""
     if metrics_df.empty or len(metrics_df) < 2:
         return None
@@ -644,8 +633,8 @@ def plot_parallel_coordinates(
     df = metrics_df.copy()
     df["Orientacion_Num"] = df["Orientacion"].str.replace("°", "").astype(float)
 
-    cols = ["Area", "EjeMayor_km", "Aspect_Ratio", "Orientacion_Num", "MaxFL", "MaxH_km", "MaxRef", "MinCTT"]
-    titulos = ["Área\n(km²)", "Eje Mayor\n(km)", "Relación\nAspecto", "Rumbo\n(°)", "Tope\n(FL)", "Tope\n(km)", "Refl. Máx\n(dBZ)", "Min CTT\n(°C)"]
+    cols = ["Area", "EjeMayor_km", "EjeMenor_km", "Orientacion_Num", "MaxFL", "MaxH_km", "MaxRef", "MinCTT"]
+    titulos = ["Área\n(km²)", "Eje Mayor\n(km)", "Eje Menor\n((km))", "Rumbo\n(°)", "Tope\n(FL)", "Tope\n(km)", "Refl. Máx\n(dBZ)", "Min CTT\n(°C)"]
 
     mins, maxs = df[cols].min(), df[cols].max()
     ranges = maxs - mins
@@ -777,14 +766,12 @@ def main() -> None:
     with col2:
         st.header(":blue[Tabla de Advertencias]")
         options = [
-            f"ID: {int(r.ID)}, Tipo: {r.Tipo}, Tope: FL{int(r.MaxFL):03d}, Area: {int(r.Area)} km²"
-            for _, r in metrics_df.iterrows()
-        ]
+                   f"ID: {int(r.ID)}, Tipo: {r.Tipo}, Tope: FL{int(r.MaxFL):03d}, Area: {int(r.Area)} km²"
+                   for _, r in metrics_df.iterrows()
+                  ]
         options.insert(0, "-- Seleccionar Polígono --")
 
-        selected_option = st.selectbox(
-            ":blue[Seleccionar una advertencia para resaltar en el mapa:]", options, index=0
-        )
+        selected_option = st.selectbox(":blue[Seleccionar una advertencia para resaltar en el mapa:]", options, index=0)
 
         highlight_poly_id = None
         if selected_option != "-- Seleccionar Polígono --":
@@ -802,52 +789,52 @@ def main() -> None:
             mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
             mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")
             mc7.metric(
-                "Orientación",
-                f"{poly_data.Orientacion}",
-                delta=rumbo_to_arrow(int(str(poly_data.Orientacion).replace("°", ""))),
-            )
+                       "Orientación",
+                       f"{poly_data.Orientacion}",
+                       delta=rumbo_to_arrow(int(str(poly_data.Orientacion).replace("°", ""))),
+                      )
 
             st.error(f"🚨 **Impacto Operacional Estimado:** {poly_data.Impacto}")
 
         st.dataframe(
-            metrics_df,
-            column_order=["ID", "Tipo", "Area", "MaxFL", "MaxH_km", "MaxRef", "MinCTT", "MaxFED"],
-            height=600,
-            hide_index=True,
-        )
+                     metrics_df,
+                     column_order=["ID", "Tipo", "Area", "MaxFL", "MaxH_km", "MaxRef", "MinCTT", "MaxFED"],
+                     height=450,
+                     hide_index=True,
+                    )
 
         if not metrics_df.empty:
             csv_buffer = io.StringIO()
             metrics_df.to_csv(csv_buffer, index=False)
             st.download_button(
-                label="Descargar métricas como CSV",
-                data=csv_buffer.getvalue(),
-                file_name=f"sigmet_metrics_{start_window.strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv",
-            )
+                               label="Descargar métricas como CSV",
+                               data=csv_buffer.getvalue(),
+                               file_name=f"sigmet_metrics_{start_window.strftime('%Y%m%d_%H%M')}.csv",
+                               mime="text/csv",
+                              )
 
     with col1:
         st.header(":blue[Mapa de Advertencias]")
         fig_map = plot_interactive_map_streamlit(
-            warning_polygons,
-            metrics_df,
-            data["ir_data"],
-            data["x"],
-            data["y"],
-            data["abi_crs"],
-            data["max_reflectivity_proxy"],
-            data["lon_mesh"],
-            data["lat_mesh"],
-            data["paises"],
-            data["fir_ezeiza"],
-            data["fir_cordoba"],
-            data["fir_resistencia"],
-            data["fir_mendoza"],
-            data["fir_comodoro"],
-            data["df_airports"],
-            data["start_window"],
-            highlight_poly_id=highlight_poly_id,
-        )
+                                                 warning_polygons,
+                                                 metrics_df,
+                                                 data["ir_data"],
+                                                 data["x"],
+                                                 data["y"],
+                                                 data["abi_crs"],
+                                                 data["max_reflectivity_proxy"],
+                                                 data["lon_mesh"],
+                                                 data["lat_mesh"],
+                                                 data["paises"],
+                                                 data["fir_ezeiza"],
+                                                 data["fir_cordoba"],
+                                                 data["fir_resistencia"],
+                                                 data["fir_mendoza"],
+                                                 data["fir_comodoro"],
+                                                 data["df_airports"],
+                                                 data["start_window"],
+                                                 highlight_poly_id=highlight_poly_id,
+                                                )
         st.pyplot(fig_map)
 
     # Análisis Multivariado
