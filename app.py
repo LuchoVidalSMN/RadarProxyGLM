@@ -534,26 +534,26 @@ def plot_interactive_map_streamlit(
 
     if ir_data is not None:
         ax.imshow(
-                    ir_data,
-                    origin="upper",
-                    extent=[x.min(), x.max(), y.min(), y.max()],
-                    transform=abi_crs,
-                    cmap="Greys",
-                    vmin=-90,
-                    vmax=40,
-                    zorder=1,
+                  ir_data,
+                  origin="upper",
+                  extent=[x.min(), x.max(), y.min(), y.max()],
+                  transform=abi_crs,
+                  cmap="Greys",
+                  vmin=-90,
+                  vmax=40,
+                  zorder=1,
                  )
 
     proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 20, max_reflectivity_proxy)
     im_proxy = ax.pcolormesh(
-                                lon_mesh,
-                                lat_mesh,
-                                proxy_masked,
-                                cmap=CMAP_AVIATION,
-                                norm=NORM_AVIATION,
-                                alpha=0.75,
-                                transform=ccrs.PlateCarree(),
-                                zorder=2,
+                             lon_mesh,
+                             lat_mesh,
+                             proxy_masked,
+                             cmap=CMAP_AVIATION,
+                             norm=NORM_AVIATION,
+                             alpha=0.75,
+                             transform=ccrs.PlateCarree(),
+                             zorder=2,
                             )
 
     # Capas vectoriales FIR y división política
@@ -569,15 +569,15 @@ def plot_interactive_map_streamlit(
             if (b["plot_lon_min"] < ap.Lon < b["plot_lon_max"]) and (b["plot_lat_min"] < ap.Lat < b["plot_lat_max"]):
                 ax.scatter(ap.Lon, ap.Lat, marker="s", s=12, color="#072ac8", zorder=5, transform=ccrs.PlateCarree())
                 ax.text(
-                    ap.Lon + 0.15,
-                    ap.Lat - 0.21,
-                    ap["Codigo ICAO"],
-                    fontsize=8,
-                    c="#072ac8",
-                    clip_on=True,
-                    zorder=5,
-                    transform=ccrs.PlateCarree(),
-                )
+                        ap.Lon + 0.15,
+                        ap.Lat - 0.21,
+                        ap["Codigo ICAO"],
+                        fontsize=8,
+                        c="#072ac8",
+                        clip_on=True,
+                        zorder=5,
+                        transform=ccrs.PlateCarree(),
+                       )
 
     cbar = plt.colorbar(im_proxy, ax=ax, orientation="horizontal", pad=0.01, shrink=0.65, ticks=[25, 35, 45, 57.5])
     cbar.ax.set_xticklabels(["Leve", "Moderado", "Fuerte", "Extremo"], fontsize=11)
@@ -589,14 +589,14 @@ def plot_interactive_map_streamlit(
         is_sel = highlight_poly_id == current_id
 
         ax.add_geometries(
-            [poly],
-            ccrs.PlateCarree(),
-            facecolor="none",
-            edgecolor="red" if is_sel else "#219ebc",
-            linewidth=2.5 if is_sel else 1.5,
-            hatch="///",
-            zorder=7 if is_sel else 6,
-        )
+                          [poly],
+                          ccrs.PlateCarree(),
+                          facecolor="none",
+                          edgecolor="red" if is_sel else "#219ebc",
+                          linewidth=2.5 if is_sel else 1.5,
+                          hatch="///",
+                          zorder=7 if is_sel else 6,
+                         )
 
         if not metrics_df.empty and current_id in metrics_df["ID"].values:
             row = metrics_df[metrics_df["ID"] == current_id].iloc[0]
@@ -607,18 +607,18 @@ def plot_interactive_map_streamlit(
                 dlon = (arrow_km / (111.32 * np.cos(np.radians(row.CenLat)))) * np.sin(np.radians(rumbo))
 
                 ax.annotate(
-                    "",
-                    xy=(row.CenLon + dlon, row.CenLat + dlat),
-                    xytext=(row.CenLon - dlon, row.CenLat - dlat),
-                    arrowprops=dict(
-                        arrowstyle="<->, head_width=0.2, head_length=0.3",
-                        color="red" if is_sel else "#219ebc",
-                        linewidth=2.0 if is_sel else 1.2,
-                        mutation_scale=12,
-                    ),
-                    xycoords=ccrs.PlateCarree()._as_mpl_transform(ax),
-                    zorder=8,
-                )
+                            "",
+                            xy=(row.CenLon + dlon, row.CenLat + dlat),
+                            xytext=(row.CenLon - dlon, row.CenLat - dlat),
+                            arrowprops=dict(
+                                arrowstyle="<->, head_width=0.2, head_length=0.3",
+                                color="red" if is_sel else "#219ebc",
+                                linewidth=2.0 if is_sel else 1.2,
+                                mutation_scale=12,
+                            ),
+                            xycoords=ccrs.PlateCarree()._as_mpl_transform(ax),
+                            zorder=8,
+                           )
 
     plt.tight_layout()
     return fig
@@ -745,10 +745,10 @@ def main() -> None:
         st.markdown("""
                     | Categoría | Acrónimo | Eje Mayor (L) | Relación de Aspecto (L/W) | Cobertura (A) | Reflectividad Típica |
                     | :--- | :---: | :---: | :---: | :---: | :---: |
-                    | **Celda Aislada** | `IC` | <50km | <2.5 | < 400km^2 | 35 – 50 dBZ |
-                    | **Clúster Multicelular** | `CC` | >50km | <3 | >400km^2 | 40 – 55 dBZ |
-                    | **Línea Convectiva** | `QLCS` | >100km | >3 | Variable | 45 – >60 dBZ |
-                    | **Sistema Mesoescalar** | `MCS` | >100km | Variable | >1000km^2 | 40 – >55 dBZ |
+                    | **Celda Aislada** | `IC` | <50 km | <2.5 | < 400 km² | 35 – 50 dBZ |
+                    | **Clúster Multicelular** | `CC` | >50 km | <3 | >400 km² | 40 – 55 dBZ |
+                    | **Línea Convectiva** | `QLCS` | >100 km | >3 | Variable | 45 – >60 dBZ |
+                    | **Sistema Mesoescalar** | `MCS` | >100 km | Variable | >1000 km² | 40 – >55 dBZ |
                     """)
 
         st.markdown("---")
@@ -795,7 +795,7 @@ def main() -> None:
             """)
 
         st.info(
-            "💡 **Pauta Operativa Anexo 3 OACI:** Todo eco con reflectividad >40dBZ o topes >FL350 debe ser considerado zona de exclusión de vuelo con margen de seguridad horizontal mínimo de 20 NM a barlovento."        )
+            "💡 **Pauta Operativa Anexo 3 OACI:** Todo eco con reflectividad >40 dBZ o topes >FL350 debe ser considerado zona de exclusión de vuelo con margen de seguridad horizontal mínimo de 20 NM a barlovento."        )
 
     initial_dt = datetime(2023, 12, 17, 6, 0, 0)
     sel_date = st.date_input(":blue[Selecciona la fecha]", value=initial_dt.date())
