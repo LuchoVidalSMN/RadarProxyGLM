@@ -634,7 +634,7 @@ def plot_parallel_coordinates(
     df["Orientacion_Num"] = df["Orientacion"].str.replace("°", "").astype(float)
 
     cols = ["Area", "EjeMayor_km", "EjeMenor_km", "Orientacion_Num", "MaxFL", "MaxH_km", "MaxRef", "MinCTT"]
-    titulos = ["Área\n(km²)", "Eje Mayor\n(km)", "Eje Menor\n((km))", "Rumbo\n(°)", "Tope\n(FL)", "Tope\n(km)", "Refl. Máx\n(dBZ)", "Min CTT\n(°C)"]
+    titulos = ["Área\n(km²)", "Eje Mayor\n(km)", "Eje Menor\n(km)", "Rumbo\n(°)", "Tope\n(FL)", "Tope\n(km)", "Refl. Máx\n(dBZ)", "Min CTT\n(°C)"]
 
     mins, maxs = df[cols].min(), df[cols].max()
     ranges = maxs - mins
@@ -734,17 +734,81 @@ def main() -> None:
     st.set_page_config(layout="wide")
     st.image("smn_horizontal_arg-01.jpg", width=250)
     st.title(":blue[Producto TS-SIGMET | Dashboard Interactivo (EXPERIMENTAL)]")
-
-    with st.expander("⚠️ **Referencia de tipo de tormenta y seguridad operacional**"):
+    
+    with st.expander("⚠️ **Manual Operativo: Clasificación Convectiva, Morfología Radar y Seguridad Operacional**"):
         st.markdown("""
-        Esta clasificación tipifica los sistemas convectivos a partir de su **morfología radar**
-        (longitud del eje mayor, relación de aspecto y extensión superficial) para la toma de
-        decisiones aeronáuticas y emisión de mensajes SIGMET:
-        * **CELDA AISLADA (IC):** Eje mayor $< 50\\text{ km}$ y $\\text{L}/\\text{W} < 2.5$. Desvíos tácticos directos de corto radio.
-        * **CLÚSTER MULTICELULAR (CC):** Área $\\ge 400\\text{ km}^2$ o eje mayor $\\ge 50\\text{ km}$ no lineal. Navegación táctica compleja entre núcleos.
-        * **LÍNEA CONVECTIVA (QLCS):** Eje mayor $\\ge 100\\text{ km}$ y $\\text{L}/\\text{W} \\ge 3.0$. Bloqueo transversal severo continuo.
-        * **SISTEMA CONVECTIVO DE MESOESCALA (MCS):** Área $\\ge 1000\\text{ km}^2$ o $100\\text{ km} \\times 40\\text{ km}$. Disrupción FIR masiva.
-        """)
+        ### Criterios de Clasificación Morfológica y Toma de Decisiones
+
+        El sistema procesa la geometría de la envolvente convexa simplificada (*Convex Hull*) y el campo de reflectividad proxy para categorizar las tormentas según taxonomías estandarizadas (*Parker & Johnson; Gallus et al.*) adaptadas al monitoreo y emisión de mensajes **TS-SIGMET**.        """)
+
+        # Tabla comparativa de umbrales cuantitativos
+        st.markdown("""
+                    | Categoría | Acrónimo | Eje Mayor ($L$) | Relación de Aspecto ($L/W$) | Cobertura ($A$) | Reflectividad Típica |
+                    | :--- | :---: | :---: | :---: | :---: | :---: |
+                    | **Celda Aislada** | `IC` | $< 50\text{ km}$ | $< 2.5$ | $< 400\text{ km}^2$ | 35 – 50 dBZ |
+                    | **Clúster Multicelular** | `CC` | $\ge 50\text{ km}$ | $< 3.0$ | $\ge 400\text{ km}^2$ | 40 – 55 dBZ |
+                    | **Línea Convectiva** | `QLCS` | $\ge 100\text{ km}$ | $\ge 3.0$ | Variable | 45 – >60 dBZ |
+                    | **Sistema Mesoescalar** | `MCS` | $\ge 100\text{ km}$ | Variable | $\ge 1000\text{ km}^2$ | 40 – >55 dBZ |
+                    """)
+
+        st.markdown("---")
+
+        # Tarjetas desglosadas por tipología
+        t1, t2 = st.columns(2)
+
+        with t1:
+            st.markdown("""
+            #### 🟢 Celda Aislada (IC - Isolated Cell)
+            * **Estructura Meteorológica:** Celdas convectivas pulsantes u ordinarias de escala local con corrientes ascendentes y descendentes bien delimitadas.
+            * **Peligros Principales:** Microfrentes de ráfagas locales (*microbursts*), granizo localizado y turbulencia severa acotada al núcleo y su entorno inmediato (< 5 NM).
+            * **Gestión de Tránsito Aéreo (ATC) & Pilotos:**
+                * Desvíos tácticos mínimos (5 a 10 NM a barlovento).
+                * Alta probabilidad de circunnavegación visual o con radar de a bordo (WXR) sin saturar los sectores terminales.
+            """)
+
+            st.markdown("""
+            #### 🟡 Clúster Multicelular (CC - Cluster of Cells)
+            * **Estructura Meteorológica:** Agrupación desorganizada o semiorganizada de celdas en diferentes etapas de ciclo de vida (iniciación, madurez, disipación).
+            * **Peligros Principales:** Turbulencia severa en aire claro (CAT), engelamiento fuerte en niveles medios y presencia de "corredores engañosos" (*blind alleys*) entre núcleos activos.
+            * **Gestión de Tránsito Aéreo (ATC) & Pilotos:**
+                * Prohibida la penetración a través de brechas estrechas entre ecos con reflectividad > 35 dBZ.
+                * Rutas de desvío estratégicas; requiere coordinación temprana con control de ruta para evitar atrapamiento entre celdas secundarias.
+            """)
+
+        with t2:
+            st.markdown("""
+            #### 🟠 Sistema Cuasi-Lineal / Línea de Inestabilidad (QLCS)
+            * **Estructura Meteorológica:** Banda convectiva alargada y continua (*Squall Line* / frente frío activo) con fuerte forzamiento dinámico lineal.
+            * **Peligros Principales:** Frentes de ráfagas violentos (*gust fronts*), cizalladura horizontal/vertical del viento (*low-level windshear*), turbulencia extrema a lo largo del frente y granizo que puede proyectarse varios kilómetros por delante del borde de ataque.
+            * **Gestión de Tránsito Aéreo (ATC) & Pilotos:**
+                * **Bloqueo transversal total de aerovías:** La penetración frontal está formalmente contraindicada.
+                * Se requieren desvíos de largo radio circunvalando los extremos de la línea o demoras en circuito de espera hasta el pasaje del sistema.
+            """)
+
+            st.markdown("""
+            #### 🔴 Sistema Convectivo de Mesoescala (MCS)
+            * **Estructura Meteorológica:** Complejo convectivo de gran escala con extensas regiones de lluvia estratiforme electrificada que engloba múltiples núcleos de tormenta severa y topes que habitualmente sobrepasan la tropopausa.
+            * **Peligros Principales:** Engelamiento severo generalizado en niveles de crucero, cimas nubosas penetrantes (overshooting tops) que superan **FL400**, y actividad eléctrica intra-nube y nube-tierra continua.
+            * **Gestión de Tránsito Aéreo (ATC) & Pilotos:**
+                * **Disrupción masiva del espacio aéreo (escala FIR):** Colapso de rutas troncales y sectores de control.
+                * Exige reformulación de planes de vuelo, desvíos interprovinciales obligatorios y aplicación inmediata de procedimientos de contingencia y espaciamiento por flujo (ATFM).
+            """)
+
+        st.info(
+            "💡 **Pauta Operativa Anexo 3 OACI:** Todo eco proxy con reflectividad $\ge 40\text{ dBZ}$ o topes $\ge \text{FL350}$ debe ser considerado zona de exclusión de vuelo con margen de seguridad horizontal mínimo de 20 NM a barlovento."
+        )
+    
+
+    # with st.expander("⚠️ **Referencia de tipo de tormenta y seguridad operacional**"):
+    #     st.markdown("""
+    #     Esta clasificación tipifica los sistemas convectivos a partir de su **morfología radar**
+    #     (longitud del eje mayor, relación de aspecto y extensión superficial) para la toma de
+    #     decisiones aeronáuticas y emisión de mensajes SIGMET:
+    #     * **CELDA AISLADA (IC):** Eje mayor $< 50\\text{ km}$ y $\\text{L}/\\text{W} < 2.5$. Desvíos tácticos directos de corto radio.
+    #     * **CLÚSTER MULTICELULAR (CC):** Área $\\ge 400\\text{ km}^2$ o eje mayor $\\ge 50\\text{ km}$ no lineal. Navegación táctica compleja entre núcleos.
+    #     * **LÍNEA CONVECTIVA (QLCS):** Eje mayor $\\ge 100\\text{ km}$ y $\\text{L}/\\text{W} \\ge 3.0$. Bloqueo transversal severo continuo.
+    #     * **SISTEMA CONVECTIVO DE MESOESCALA (MCS):** Área $\\ge 1000\\text{ km}^2$ o $100\\text{ km} \\times 40\\text{ km}$. Disrupción FIR masiva.
+    #     """)
 
     initial_dt = datetime(2023, 12, 17, 6, 0, 0)
     sel_date = st.date_input(":blue[Selecciona la fecha]", value=initial_dt.date())
