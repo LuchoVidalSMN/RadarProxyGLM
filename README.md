@@ -153,6 +153,7 @@ La aplicación utiliza datos públicos de [AWS S3](https://registry-opendata-aws
 ## Diagramas de flujo del aplicativo
 
 ### 1) Módulo de configuración e interfaz
+```mermaid
 flowchart TD
     A[Inicio] --> B[Importar librerías]
     B --> C[Definir constantes globales]
@@ -173,7 +174,7 @@ flowchart TD
     E2 --> F
 
 ### 2) Módulo de adquisición y preprocesamiento
-
+```mermaid
 flowchart TD
     A[datetime de análisis] --> B[load_and_process_data]
     B --> C[Detectar bucket GOES]
@@ -196,7 +197,7 @@ flowchart TD
     O --> P[Generar reflectividad proxy]
 
 ### 3) Módulo de detección y clasificación
-
+```mermaid
 flowchart TD
     A[Reflectividad proxy] --> B[Aplicar umbral 25 dBZ]
     B --> C[Label connected components]
@@ -229,7 +230,7 @@ flowchart TD
     T --> U[Construir metrics_df]
 
 ### 4) Módulo de visualización y análisis comparativo
-
+```mermaid
 flowchart TD
     A[Datos procesados] --> B[plot_interactive_map_streamlit]
 
