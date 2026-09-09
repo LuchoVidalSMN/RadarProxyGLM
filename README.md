@@ -172,7 +172,7 @@ flowchart TD
     E --> E2[Seleccionar hora UTC]
     E1 --> F[Construir datetime]
     E2 --> F
-
+```
 ### 2) Módulo de adquisición y preprocesamiento
 ```mermaid
 flowchart TD
@@ -195,7 +195,7 @@ flowchart TD
     M --> N[Construir histograma 2D]
     N --> O[Aplicar suavizado gaussiano]
     O --> P[Generar reflectividad proxy]
-
+```
 ### 3) Módulo de detección y clasificación
 ```mermaid
 flowchart TD
@@ -228,7 +228,7 @@ flowchart TD
 
     S --> T[IC / CC / QLCS / MCS]
     T --> U[Construir metrics_df]
-
+```
 ### 4) Módulo de visualización y análisis comparativo
 ```mermaid
 flowchart TD
@@ -260,7 +260,7 @@ flowchart TD
     W --> X[Dibujar líneas por sistema]
     X --> Y[Resaltar selección si existe]
     Y --> Z[Mostrar gráfico]
-
+```
 ---
 
 ## 🚀 Cómo Ejecutar la Aplicación Localmente
