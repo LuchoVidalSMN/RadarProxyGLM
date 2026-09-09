@@ -150,6 +150,116 @@ La aplicación utiliza datos públicos de [AWS S3](https://registry-opendata-aws
 *   **GLM (Geostationary Lightning Mapper) Nivel 2 LCFA:** Datos de flashes de rayos, utilizados para generar un proxy de reflectividad. Para más info [Rudlosky et al., 2019](https://doi.org/10.1029/2018GL081052)
 *   **ABI (Advanced Baseline Imager) Nivel 2 CMIPF Banda 13:** Datos de temperatura de brillo infrarroja, utilizados como capa de fondo para contextualizar la nubosidad. Para más info [Schmit et al., 2017](https://doi.org/10.1175/BAMS-D-15-00230.1).
 
+## Diagramas de flujo del aplicativo
+
+### 1) Módulo de configuración e interfaz
+flowchart TD
+    A[Inicio] --> B[Importar librerías]
+    B --> C[Definir constantes globales]
+    C --> C1[Paleta de colores]
+    C --> C2[Niveles de reflectividad]
+    C --> C3[S3FileSystem global]
+
+    C --> D[Configurar Streamlit]
+    D --> D1[set_page_config]
+    D --> D2[Mostrar logo]
+    D --> D3[Mostrar título]
+    D --> D4[Mostrar expander de referencia]
+
+    D --> E[Entrada de usuario]
+    E --> E1[Seleccionar fecha]
+    E --> E2[Seleccionar hora UTC]
+    E1 --> F[Construir datetime]
+    E2 --> F
+
+### 2) Módulo de adquisición y preprocesamiento
+
+flowchart TD
+    A[datetime de análisis] --> B[load_and_process_data]
+    B --> C[Detectar bucket GOES]
+    C --> D{¿Hay datos en GOES-16?}
+    D -- Sí --> E[Usar noaa-goes16]
+    D -- No --> F[Usar noaa-goes19]
+
+    E --> G[Buscar archivos GLM]
+    F --> G
+    G --> H[Buscar archivo ABI C13]
+    G --> I[Buscar archivo ABI CTPF]
+
+    H --> J{¿Archivos completos?}
+    I --> J
+    J -- No --> K[Mostrar advertencia y detener]
+    J -- Sí --> L[Leer GLM]
+    L --> M[Filtrar flashes por región]
+    M --> N[Construir histograma 2D]
+    N --> O[Aplicar suavizado gaussiano]
+    O --> P[Generar reflectividad proxy]
+
+### 3) Módulo de detección y clasificación
+
+flowchart TD
+    A[Reflectividad proxy] --> B[Aplicar umbral 25 dBZ]
+    B --> C[Label connected components]
+    C --> D[Extraer contornos]
+    D --> E[Crear polígonos Shapely]
+    E --> F[Corregir geometrías inválidas]
+    F --> G[Filtrar por área mínima]
+    G --> H[Intersección con bbox visible]
+
+    H --> I[Para cada polígono]
+    I --> J[Calcular convex hull]
+    J --> K[Simplificar polígono]
+    K --> L[Calcular eje mayor/menor]
+    K --> M[Calcular orientación]
+    K --> N[Calcular área km²]
+
+    L --> O[Extraer valores GLM/IR/CTP dentro del polígono]
+    M --> O
+    N --> O
+
+    O --> P[Calcular MaxRef, MaxFED, MinCTT]
+    O --> Q[Convertir presión mínima a altura]
+    O --> R[Convertir presión mínima a FL]
+
+    P --> S[Clasificar morfología]
+    Q --> S
+    R --> S
+
+    S --> T[IC / CC / QLCS / MCS]
+    T --> U[Construir metrics_df]
+
+### 4) Módulo de visualización y análisis comparativo
+
+flowchart TD
+    A[Datos procesados] --> B[plot_interactive_map_streamlit]
+
+    B --> C[Dibujar fondo IR]
+    C --> D[Dibujar proxy reflectividad]
+    D --> E[Agregar países]
+    E --> F[Agregar FIRs]
+    F --> G[Agregar aeropuertos]
+    G --> H[Dibujar polígonos SIGMET]
+    H --> I[Resaltar polígono seleccionado]
+    I --> J[Agregar flecha de orientación]
+    J --> K[Mostrar mapa]
+
+    K --> L[Mostrar tabla de advertencias]
+    L --> M[Selectbox de selección]
+    M --> N{¿Se seleccionó un polígono?}
+    N -- Sí --> O[Mostrar métricas destacadas]
+    N -- Sí --> P[Mostrar impacto operacional]
+    N -- Sí --> Q[Pasar highlight_poly_id al mapa]
+    N -- No --> R[Sin resaltado]
+
+    K --> S[Sección análisis multivariado]
+    S --> T{¿Hay al menos 2 sistemas?}
+    T -- No --> U[Mostrar mensaje informativo]
+    T -- Sí --> V[plot_parallel_coordinates]
+    V --> W[Normalizar variables]
+    W --> X[Dibujar líneas por sistema]
+    X --> Y[Resaltar selección si existe]
+    Y --> Z[Mostrar gráfico]
+
 ---
 
 ## 🚀 Cómo Ejecutar la Aplicación Localmente
