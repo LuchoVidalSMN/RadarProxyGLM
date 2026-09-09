@@ -153,6 +153,17 @@ La aplicación utiliza datos públicos de [AWS S3](https://registry-opendata-aws
 ## Diagramas de flujo del aplicativo
 
 ### 1) Módulo de configuración e interfaz
+
+Propósito:
+Preparar el entorno de ejecución de la aplicación y permitir al usuario seleccionar el instante de análisis.
+
+Qué hace:
+Este módulo carga las librerías necesarias, define parámetros globales como la paleta de colores y la conexión S3, y configura la interfaz principal de Streamlit. Luego presenta los controles de selección de fecha y hora UTC para construir el datetime que alimentará todo el procesamiento posterior.
+
+Salida principal:
+
+- start_window_user
+
 ```mermaid
 flowchart TD
     A[Inicio] --> B[Importar librerías]
@@ -174,6 +185,23 @@ flowchart TD
     E2 --> F
 ```
 ### 2) Módulo de adquisición y preprocesamiento
+
+Propósito:
+Localizar y cargar los productos satelitales necesarios para el análisis convectivo.
+
+Qué hace:
+A partir del instante seleccionado, el script detecta automáticamente si hay datos disponibles en GOES-16 o GOES-19. Luego busca los archivos GLM, ABI canal 13 y CTPF correspondientes. Con los flashes GLM construye una densidad espacial, la filtra por el área de interés, aplica suavizado gaussiano y genera un proxy de reflectividad que representa la intensidad convectiva estimada.
+
+Entradas principales:
+- start_window_user
+- sistema de archivos S3
+
+Salidas principales:
+- flashes filtrados
+- imagen IR recortada
+- campo CTPF
+- max_reflectivity_proxy
+
 ```mermaid
 flowchart TD
     A[datetime de análisis] --> B[load_and_process_data]
@@ -197,6 +225,23 @@ flowchart TD
     O --> P[Generar reflectividad proxy]
 ```
 ### 3) Módulo de detección y clasificación
+
+Propósito:
+Identificar los sistemas convectivos relevantes y caracterizarlos morfológicamente.
+
+Qué hace:
+El proxy de reflectividad se umbraliza para encontrar zonas de actividad convectiva significativa. Esas zonas se agrupan en componentes conectados, se transforman en polígonos y se depuran si presentan geometrías inválidas o áreas demasiado pequeñas. Luego se calcula el convex hull y sus propiedades geométricas principales, como área, eje mayor, eje menor y orientación. En paralelo, el script obtiene los topes nubosos a partir del CTPF y convierte la presión mínima en altura y Flight Level. Finalmente clasifica cada sistema como IC, CC, QLCS o MCS.
+
+Entradas principales:
+- max_reflectivity_proxy
+- ir_data
+- ctp_data
+- grillas espaciales
+
+Salidas principales:
+- warning_polygons
+- metrics_df
+
 ```mermaid
 flowchart TD
     A[Reflectividad proxy] --> B[Aplicar umbral 25 dBZ]
@@ -230,6 +275,25 @@ flowchart TD
     T --> U[Construir metrics_df]
 ```
 ### 4) Módulo de visualización y análisis comparativo
+
+Propósito:
+Presentar los resultados de forma interactiva y facilitar la interpretación operacional.
+
+Qué hace:
+Este módulo construye el mapa principal con el fondo infrarrojo, el proxy de reflectividad, los límites geográficos, los FIR y los aeropuertos. Después dibuja los polígonos SIGMET y resalta en rojo el sistema seleccionado por el usuario. En la columna derecha muestra la tabla de advertencias, las métricas destacadas y el impacto operacional. Finalmente, si existen al menos dos sistemas convectivos, genera el gráfico de coordenadas paralelas para comparar su estructura y severidad.
+
+Entradas principales:
+- warning_polygons
+- metrics_df
+- ir_data
+- abi_crs
+- capas geográficas
+
+Salidas principales:
+- mapa interactivo
+- tabla de métricas
+- gráfico de coordenadas paralelas
+
 ```mermaid
 flowchart TD
     A[Datos procesados] --> B[plot_interactive_map_streamlit]
