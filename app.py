@@ -469,6 +469,7 @@ def load_and_process_data(
                                 "Area": hull_info["area_hull_km2"],
                                 "Tipo": morph["codigo"],
                                 "Descripcion": morph["tipo"],
+                                "Peligros": morph["peligros"],
                                 "Impacto": morph["impacto"],
                                 "Aspect_Ratio": round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
                                 "EjeMayor_km": hull_info["major_axis_km"],
@@ -844,6 +845,7 @@ def main() -> None:
                        delta=rumbo_to_arrow(int(str(poly_data.Orientacion).replace("°", ""))),
                       )
 
+            st.error(f"🚨 **Peligros Principales:** {poly_data.Peligros}")
             st.error(f"🚨 **Impacto Operacional Estimado:** {poly_data.Impacto}")
 
         st.dataframe(
