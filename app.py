@@ -823,42 +823,21 @@ def main() -> None:
     if not metrics_df.empty:
         metrics_df = metrics_df.sort_values(by="Area", ascending=False).reset_index(drop=True)
 
-    highlight_poly_id = None
+    options = [
+        f"ID: {int(r.ID)}, Tipo: {r.Tipo}, Tope: FL{int(r.MaxFL):03d}, Area: {int(r.Area)} km²"
+        for _, r in metrics_df.iterrows()
+    ]
+    options.insert(0, "-- Seleccionar Polígono --")
+
     col1, col2 = st.columns([1, 1])
 
-    with col1:
-        st.header(":blue[Mapa de Advertencias]")
-        fig_map = plot_interactive_map_streamlit(
-                                                 warning_polygons,
-                                                 metrics_df,
-                                                 data["ir_data"],
-                                                 data["x"],
-                                                 data["y"],
-                                                 data["abi_crs"],
-                                                 data["max_reflectivity_proxy"],
-                                                 data["lon_mesh"],
-                                                 data["lat_mesh"],
-                                                 data["paises"],
-                                                 data["fir_ezeiza"],
-                                                 data["fir_cordoba"],
-                                                 data["fir_resistencia"],
-                                                 data["fir_mendoza"],
-                                                 data["fir_comodoro"],
-                                                 data["df_airports"],
-                                                 data["start_window"],
-                                                 highlight_poly_id=highlight_poly_id,
-                                                )
-        st.pyplot(fig_map, use_container_width=True)
-        
     with col2:
         st.header(":blue[Tabla de Advertencias]")
-        options = [
-                   f"ID: {int(r.ID)}, Tipo: {r.Tipo}, Tope: FL{int(r.MaxFL):03d}, Area: {int(r.Area)} km²"
-                   for _, r in metrics_df.iterrows()
-                  ]
-        options.insert(0, "-- Seleccionar Polígono --")
-
-        selected_option = st.selectbox(":blue[Seleccionar una advertencia para resaltar en el mapa:]", options, index=0)
+        selected_option = st.selectbox(
+            ":blue[Seleccionar una advertencia para resaltar en el mapa:]",
+            options,
+            index=0,
+        )
 
         highlight_poly_id = None
         if selected_option != "-- Seleccionar Polígono --":
@@ -874,33 +853,57 @@ def main() -> None:
             mc3.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
             mc4.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")
 
-            mc3, mc4 = st.columns(2)
-            mc3.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
-            mc4.metric(
-                       "Orientación",
-                       f"{poly_data.Orientacion}",
-                       delta=rumbo_to_arrow(int(str(poly_data.Orientacion).replace("°", ""))),
-                      )
+            mc5, mc6 = st.columns(2)
+            mc5.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
+            mc6.metric(
+                "Orientación",
+                f"{poly_data.Orientacion}",
+                delta=rumbo_to_arrow(int(str(poly_data.Orientacion).replace("°", ""))),
+            )
 
             st.error(f"⚠️ **Peligros Principales:** {poly_data.Peligros}")
             st.error(f"🚨 **Impacto Operacional Estimado:** {poly_data.Impacto}")
 
         st.dataframe(
-                     metrics_df,
-                     column_order=["ID", "Tipo", "Area", "MaxFL", "MaxH_km", "MaxRef", "MinCTT", "MaxFED"],
-                     height=450,
-                     hide_index=True,
-                    )
+            metrics_df,
+            column_order=["ID", "Tipo", "Area", "MaxFL", "MaxH_km", "MaxRef", "MinCTT", "MaxFED"],
+            height=450,
+            hide_index=True,
+        )
 
         if not metrics_df.empty:
             csv_buffer = io.StringIO()
             metrics_df.to_csv(csv_buffer, index=False)
             st.download_button(
-                               label="Descargar métricas como CSV",
-                               data=csv_buffer.getvalue(),
-                               file_name=f"sigmet_metrics_{start_window.strftime('%Y%m%d_%H%M')}.csv",
-                               mime="text/csv",
-                              )
+                label="Descargar métricas como CSV",
+                data=csv_buffer.getvalue(),
+                file_name=f"sigmet_metrics_{start_window.strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+            )
+
+    with col1:
+        st.header(":blue[Mapa de Advertencias]")
+        fig_map = plot_interactive_map_streamlit(
+            warning_polygons,
+            metrics_df,
+            data["ir_data"],
+            data["x"],
+            data["y"],
+            data["abi_crs"],
+            data["max_reflectivity_proxy"],
+            data["lon_mesh"],
+            data["lat_mesh"],
+            data["paises"],
+            data["fir_ezeiza"],
+            data["fir_cordoba"],
+            data["fir_resistencia"],
+            data["fir_mendoza"],
+            data["fir_comodoro"],
+            data["df_airports"],
+            data["start_window"],
+            highlight_poly_id=highlight_poly_id,  # <-- Ahora recibe el ID seleccionado
+        )
+        st.pyplot(fig_map, use_container_width=True)
 
     # Análisis Multivariado
     st.markdown("---")
