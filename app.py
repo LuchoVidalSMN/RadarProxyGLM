@@ -206,7 +206,7 @@ def classify_convective_morphology(
         return {
                 "codigo": "QLCS",
                 "tipo": "Quasi-Linear Convective System / Squall Line (Línea Convectiva)",
-                "peligro": "Frentes de ráfagas violentos (*gust fronts*), cizalladura horizontal/vertical del viento (*low-level windshear*), turbulencia extrema a lo largo del frente y granizo que puede proyectarse varios kilómetros por delante del borde de ataque.",
+                "peligros": "Frentes de ráfagas violentos (*gust fronts*), cizalladura horizontal/vertical del viento (*low-level windshear*), turbulencia extrema a lo largo del frente y granizo que puede proyectarse varios kilómetros por delante del borde de ataque.",
                 "impacto": "Bloqueo transversal total de aerovías. La penetración frontal está formalmente contraindicada. Se requieren desvíos de largo radio circunvalando los extremos de la línea o demoras en circuito de espera hasta el pasaje del sistema.",
                }
     elif area_km2 >= 1000.0 or (major_axis_km >= 100.0 and minor_axis_km >= 40.0):
