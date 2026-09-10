@@ -434,10 +434,22 @@ def load_and_process_data(
     metrics_list, sigmet_hulls = [], []
     grid_points = [Point(lo, la) for lo, la in zip(lon_mesh.flatten(), lat_mesh.flatten())]
 
+    min_area_sigmet = 300.0  # Umbral en km² del Convex Hull
+
     for idx, poly in enumerate(warning_polygons):
+        
         poly_id = idx + 1
+        
+        # 1. Calcular propiedades morfológicas del Convex Hull simplificado
         hull_info = compute_sigmet_convex_hull_properties(poly, simplify_deg=0.08)
+        area_sigmet_km2 = hull_info["area_hull_km2"]
+
+        # 2. Filtrar estrictamente por el área de la envoltura SIGMET
+        if area_sigmet_km2 < min_area_sigmet:
+            continue
+
         sigmet_hulls.append(hull_info["hull_polygon"])
+        poly_id = len(sigmet_hulls)
 
         refl_vals, ctt_vals, fed_vals, ctp_vals = [], [], [], []
         for i_flat, pt in enumerate(grid_points):
