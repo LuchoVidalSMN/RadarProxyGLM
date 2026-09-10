@@ -206,7 +206,7 @@ def classify_convective_morphology(
         return {
                 "codigo": "QLCS",
                 "tipo": "Quasi-Linear Convective System / Squall Line (Línea Convectiva)",
-                "peligros": "Frentes de ráfagas violentos (*gust fronts*), cizalladura horizontal/vertical del viento (*low-level windshear*), turbulencia extrema a lo largo del frente y granizo que puede proyectarse varios kilómetros por delante del borde de ataque.",
+                "peligros": "Frentes de ráfagas violentos (*gust fronts*), cortante horizontal/vertical del viento (*low-level windshear*), turbulencia extrema a lo largo del frente y granizo que puede proyectarse varios kilómetros por delante del borde de ataque.",
                 "impacto": "Bloqueo transversal total de aerovías. La penetración frontal está formalmente contraindicada. Se requieren desvíos de largo radio circunvalando los extremos de la línea o demoras en circuito de espera hasta el pasaje del sistema.",
                }
     elif area_km2 >= 1000.0 or (major_axis_km >= 100.0 and minor_axis_km >= 40.0):
@@ -226,7 +226,7 @@ def classify_convective_morphology(
     return {
             "codigo": "IC",
             "tipo": "Isolated Cell (Celda Individual / Celda Aislada)",
-            "peligros": "Microfrentes de ráfagas locales (*microbursts*), granizo localizado y turbulencia severa acotada al núcleo y su entorno inmediato (< 5 NM)",
+            "peligros": "Microfrentes de ráfagas locales (*microbursts*), granizo localizado y turbulencia severa acotada al núcleo y su entorno inmediato (<5 NM)",
             "impacto": "Desvíos tácticos mínimos (5 a 10 NM a barlovento). Alta probabilidad de circunnavegación visual o con radar de a bordo (WXR) sin saturar los sectores terminales",
            }
 
@@ -623,7 +623,6 @@ def plot_interactive_map_streamlit(
     plt.tight_layout()
     return fig
 
-
 def plot_parallel_coordinates(
     metrics_df: pd.DataFrame, highlight_poly_id: Optional[int] = None) -> Optional[plt.Figure]:
     """Genera coordenadas paralelas normalizadas con marcas reales y resaltado dinámico."""
@@ -735,7 +734,7 @@ def main() -> None:
     st.image("smn_horizontal_arg-01.jpg", width=250)
     st.title(":blue[Producto TS-SIGMET | Dashboard Interactivo (EXPERIMENTAL)]")
     
-    with st.expander("⚠️ **Manual Operativo: Clasificación Convectiva, Morfología Radar y Seguridad Operacional**"):
+    with st.expander("⚠️ **Manual Operativo: Clasificación convectiva, morfología radar y seguridad operacional**"):
         st.markdown("""
         ### Criterios de Clasificación Morfológica y Toma de Decisiones
 
@@ -845,7 +844,7 @@ def main() -> None:
                        delta=rumbo_to_arrow(int(str(poly_data.Orientacion).replace("°", ""))),
                       )
 
-            st.error(f"🚨 **Peligros Principales:** {poly_data.Peligros}")
+            st.error(f"⚠️ **Peligros Principales:** {poly_data.Peligros}")
             st.error(f"🚨 **Impacto Operacional Estimado:** {poly_data.Impacto}")
 
         st.dataframe(
