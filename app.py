@@ -284,7 +284,7 @@ def cluster_and_get_polygons(
     threshold_dbz: float,
     lon_mesh: np.ndarray,
     lat_mesh: np.ndarray,
-    min_area_km2: float = 100.0,) -> List[Polygon]:
+    min_area_km2: float = 300.0,) -> List[Polygon]:
     """Segmenta núcleos convectivos y los transforma en polígonos cerrados."""
     thresholded = reflectivity_data >= threshold_dbz
     labeled_arr, num_features = label(thresholded)
