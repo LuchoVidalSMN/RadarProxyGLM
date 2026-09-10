@@ -196,32 +196,42 @@ def compute_sigmet_convex_hull_properties(
 
 def classify_convective_morphology(
     area_km2: float, major_axis_km: float, minor_axis_km: float, max_dbz: float) -> Dict[str, str]:
-    """Clasifica el sistema convectivo según su escala morfológica radar."""
+    """
+    Clasifica el sistema convectivo siguiendo criterios morfológicos de radar:
+    - IC  : Isolated Cell (Celda Individual / Celda Aislada)
+    - CC  : Cluster of Cells (Clúster Convectivo Multicelular)
+    - QLCS: Quasi-Linear Convective System / Squall Line (Línea Convectiva)
+    - MCS : Mesoscale Convective System (Sistema Convectivo de Mesoescala)
+    """
     minor_axis = max(minor_axis_km, 1.0)
     aspect_ratio = major_axis_km / minor_axis
 
     if major_axis_km >= 100.0 and aspect_ratio >= 3.0:
         return {
                 "codigo": "QLCS",
-                "tipo": "Línea Convectiva (QLCS)",
-                "impacto": "Bloqueo transversal extenso; frentes de ráfaga y turbulencia severa lineal.",
+                "tipo": "Quasi-Linear Convective System / Squall Line (Línea Convectiva)",
+                "peligro": "Frentes de ráfagas violentos (*gust fronts*), cizalladura horizontal/vertical del viento (*low-level windshear*), turbulencia extrema a lo largo del frente y granizo que puede proyectarse varios kilómetros por delante del borde de ataque.",
+                "impacto": "Bloqueo transversal total de aerovías. La penetración frontal está formalmente contraindicada. Se requieren desvíos de largo radio circunvalando los extremos de la línea o demoras en circuito de espera hasta el pasaje del sistema.",
                }
     elif area_km2 >= 1000.0 or (major_axis_km >= 100.0 and minor_axis_km >= 40.0):
         return {
                 "codigo": "MCS",
-                "tipo": "Sistema Convectivo (MCS)",
-                "impacto": "Disrupción a gran escala; desvíos estratégicos interprovinciales.",
+                "tipo": "Mesoscale Convective System (Sistema Convectivo de Mesoescala)",
+                "peligros": "Engelamiento severo generalizado en niveles de crucero, topes nubosos penetrantes (overshooting tops) que superan **FL400**, y actividad eléctrica intra-nube y nube-tierra continua.",
+                "impacto": "Disrupción masiva del espacio aéreo (escala FIR). Colapso de rutas troncales y sectores de control. Exige reformulación de planes de vuelo, desvíos interprovinciales obligatorios y aplicación inmediata de procedimientos de contingencia y espaciamiento por flujo (ATFM).",
                }
     elif area_km2 >= 400.0 or major_axis_km >= 50.0:
         return {
                 "codigo": "CC",
-                "tipo": "Clúster Multicelular",
-                "impacto": "Bloqueo de aerovías locales; navegación táctica compleja entre celdas.",
+                "tipo": "Cluster of Cells (Clúster Convectivo Multicelular)",
+                "peligros": "Turbulencia severa en aire claro (CAT), engelamiento fuerte en niveles medios y presencia de 'corredores engañosos' (*blind alleys*) entre núcleos activos.",
+                "impacto": "Prohibida la penetración a través de brechas estrechas entre ecos con reflectividad >35 dBZ. Rutas de desvío estratégicas; requiere coordinación temprana con control de ruta para evitar atrapamiento entre celdas secundarias.",
                }
     return {
             "codigo": "IC",
-            "tipo": "Celda Aislada",
-            "impacto": "Desvíos tácticos directos de corto radio.",
+            "tipo": "Isolated Cell (Celda Individual / Celda Aislada)",
+            "peligros": "Microfrentes de ráfagas locales (*microbursts*), granizo localizado y turbulencia severa acotada al núcleo y su entorno inmediato (< 5 NM)",
+            "impacto": "Desvíos tácticos mínimos (5 a 10 NM a barlovento). Alta probabilidad de circunnavegación visual o con radar de a bordo (WXR) sin saturar los sectores terminales",
            }
 
 # ============================================================================ #
@@ -240,7 +250,6 @@ def detect_goes_bucket(_fs: s3fs.S3FileSystem, target_time: datetime) -> str:
         pass
     return "noaa-goes19"
 
-
 @st.cache_data(ttl=3600)
 def get_glm_files_for_window(
     _fs: s3fs.S3FileSystem, start_time: datetime, bucket_name: str, minutes: int = 5) -> List[str]:
@@ -257,7 +266,6 @@ def get_glm_files_for_window(
             continue
     return all_files
 
-
 @st.cache_data(ttl=3600)
 def get_abi_c13_file(_fs: s3fs.S3FileSystem, target_time: datetime, bucket_name: str) -> Optional[str]:
     """Localiza el archivo C13 (IR Onda Larga) en S3 más próximo al timestamp."""
@@ -266,7 +274,6 @@ def get_abi_c13_file(_fs: s3fs.S3FileSystem, target_time: datetime, bucket_name:
     files = _fs.glob(f"{folder}*C13_*_{prefix}*")
     return files[0] if files else None
 
-
 @st.cache_data(ttl=3600)
 def get_abi_ctp_file(_fs: s3fs.S3FileSystem, target_time: datetime, bucket_name: str) -> Optional[str]:
     """Localiza el producto CTPF (Cloud Top Pressure) correspondiente."""
@@ -274,7 +281,6 @@ def get_abi_ctp_file(_fs: s3fs.S3FileSystem, target_time: datetime, bucket_name:
     folder = f"{bucket_name}/ABI-L2-CTPF/{target_time.strftime('%Y/%j/%H/')}"
     files = _fs.glob(f"{folder}*CTPF*_{prefix}*")
     return files[0] if files else None
-
 
 @st.cache_data
 def cluster_and_get_polygons(
@@ -313,7 +319,6 @@ def cluster_and_get_polygons(
                         polygons.append(poly)
     return polygons
 
-
 @st.cache_resource
 def load_shape_features(path_shp: str) -> Optional[ShapelyFeature]:
     """Carga shapefiles geográficos como features vectoriales para Cartopy."""
@@ -322,7 +327,6 @@ def load_shape_features(path_shp: str) -> Optional[ShapelyFeature]:
     except Exception as e:
         st.error(f"Error cargando shapefile {path_shp}: {e}")
         return None
-
 
 @st.cache_data
 def load_airport_data(path_csv: str) -> pd.DataFrame:
@@ -334,7 +338,6 @@ def load_airport_data(path_csv: str) -> pd.DataFrame:
     except Exception as e:
         st.error(f"Error cargando datos de aeropuertos: {e}")
         return pd.DataFrame()
-
 
 @st.cache_data(ttl=3600)
 def load_and_process_data(
@@ -795,7 +798,7 @@ def main() -> None:
             """)
 
         st.info(
-            "💡 **Pauta Operativa Anexo 3 OACI:** Todo eco con reflectividad >40 dBZ o topes >FL350 debe ser considerado zona de exclusión de vuelo con margen de seguridad horizontal mínimo de 20 NM a barlovento."        )
+            "💡 **Pauta Operativa Anexo 3 OACI:** Todo eco con reflectividad mayor que 40 dBZ o topes por encima de FL350 debe ser considerado zona de exclusión de vuelo con margen de seguridad horizontal mínimo de 20 NM a barlovento."        )
 
     initial_dt = datetime(2023, 12, 17, 6, 0, 0)
     sel_date = st.date_input(":blue[Selecciona la fecha]", value=initial_dt.date())
