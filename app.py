@@ -1,436 +1,250 @@
-# ============================================================================ #
 
+# ============================================================================ #
+# 1. Librerías estándar de Python
+# ============================================================================ #
+from datetime import datetime, timedelta
 import io
-import s3fs
+from typing import Any, Dict, List, Optional
+
+# ============================================================================ #
+# 2. Computación científica, acceso a datos y entorno web
+# ============================================================================ #
+from netCDF4 import Dataset
 import numpy as np
 import pandas as pd
+import s3fs
 import streamlit as st
 
-from netCDF4 import Dataset
-from datetime import datetime, timedelta
-
+# ============================================================================ #
+# 3. Procesamiento geoespacial y análisis geométrico
+# ============================================================================ #
 import cartopy.crs as ccrs
-from cartopy.io.shapereader import Reader
 from cartopy.feature import ShapelyFeature
-
+from cartopy.io.shapereader import Reader
 from shapely.geometry import Point, Polygon, box
 
+# ============================================================================ #
+# 4. Visión por computadora y procesamiento de imágenes
+# ============================================================================ #
 from scipy.ndimage import gaussian_filter, label
-
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-from matplotlib.colors import ListedColormap, BoundaryNorm
-
 from skimage.measure import find_contours
 
 # ============================================================================ #
-# 0. Definiciones globales o constantes (fuera de funciones para Streamlit)
+# 5. Renderizado y visualización gráfica
+# ============================================================================ #
+import matplotlib as mpl
+from matplotlib.colors import BoundaryNorm, ListedColormap
+from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
+
+# ============================================================================ #
+# 0. Constantes y Configuraciones Operativas
 # ============================================================================ #
 
-# Grosor del entramado de los poligonos (advertencias)
-mpl.rcParams['hatch.linewidth'] = 0.8
+# Estilo de entramado para polígonos SIGMET en Cartopy
+mpl.rcParams["hatch.linewidth"] = 0.8
 
-# Paleta de colores para radar real
-aviation_colors = [
-    		           "#00FF00",  # Verde    (Level 1: 20-30 dBZ) | Débil
-    		           "#FFFF00",  # Amarillo (Level 2: 30-40 dBZ) | Moderado
-    		           "#FF0000",  # Rojo     (Level 3: 40-50 dBZ) | Fuerte
-    		           "#FF00FF",  # Magenta  (Level 4: > 50 dBZ)  | Extremo
+# Escala de reflectividad aeronáutica y niveles de corte
+AVIATION_COLORS = [
+                   "#00FF00",  # Nivel 1: 20-30 dBZ (Leve)
+                   "#FFFF00",  # Nivel 2: 30-40 dBZ (Moderado)
+                   "#FF0000",  # Nivel 3: 40-50 dBZ (Fuerte)
+                   "#FF00FF",  # Nivel 4: > 50 dBZ (Extremo)
                   ]
-cmap_aviation = ListedColormap(aviation_colors)
-levels_aviation = [20, 30, 40, 50, 65]
-norm_aviation = BoundaryNorm(levels_aviation, cmap_aviation.N)
+CMAP_AVIATION = ListedColormap(AVIATION_COLORS)
+LEVELS_AVIATION = [20, 30, 40, 50, 65]
+NORM_AVIATION = BoundaryNorm(LEVELS_AVIATION, CMAP_AVIATION.N)
 
-# Inicializar S3FileSystem una vez globalmente
-fs_global = s3fs.S3FileSystem(anon=True)
+# Parámetros físicos y límites espaciales (Argentina / Cono Sur)
+SPATIAL_BOUNDS = {
+                  "data_lat_min": -47.0,
+                  "data_lat_max": -18.5,
+                  "data_lon_min": -75.5,
+                  "data_lon_max": -37.0,
+                  "plot_lat_min": -45.0,
+                  "plot_lat_max": -19.0,
+                  "plot_lon_min": -75.0,
+                  "plot_lon_max": -50.0,
+                 }
 
-# Calcula altura del tope a partir del valor minimo de presión del tope nuboso
-def pressure_to_altitude_km(p_hpa):
-    """Convierte presión (hPa) a Altitud en kilómetros (km) según la atmósfera estándar ISA"""
+# Rutas de capas vectoriales operativas
+SHAPEFILE_PATHS = {
+                   "paises": "./data/shp_arg/cartopy/10m_admin_0_countries.shp",
+                   "airports": "./data/fir_txt/FIR_aeropuertos.txt",
+                   "fir_ezeiza": "./data/shp_arg/FIR/FIR_EZEIZA_backup.shp",
+                   "fir_cordoba": "./data/shp_arg/FIR/FIR_CORDOBA.shp",
+                   "fir_resistencia": "./data/shp_arg/FIR/FIR_RESISTENCIA.shp",
+                   "fir_mendoza": "./data/shp_arg/FIR/FIR_MENDOZA.shp",
+                   "fir_comodoro": "./data/shp_arg/FIR/FIR_COMODORO.shp",
+                  }
+
+# Conexión persistente de solo lectura para AWS S3
+FS_GLOBAL = s3fs.S3FileSystem(anon=True)
+
+# ============================================================================ #
+# 1. Funciones Físicas y Meteorológicas
+# ============================================================================ #
+
+def pressure_to_flight_level(p_hpa: float) -> Optional[int]:
+    """Calcula el Nivel de Vuelo (FL) según la atmósfera estándar ISA.
+
+    Parameters
+    ----------
+    p_hpa : float
+        Presión atmosférica en hectopascales (hPa).
+
+    Returns
+    -------
+    Optional[int]
+        Nivel de vuelo redondeado a múltiplos de 10 (ej. FL380), o np.nan si inválido.
+    """
     if p_hpa <= 0 or np.isnan(p_hpa) or np.ma.is_masked(p_hpa):
         return np.nan
 
-    # Troposfera (hasta ~11 km / 226.32 hPa)
+    # Troposfera (hasta ~36,000 ft / 226.32 hPa)
     if p_hpa > 226.32:
         alt_ft = 145366.45 * (1 - (p_hpa / 1013.25) ** 0.190284)
-    # Tropopausa / Baja Estratosfera (por encima de ~11 km)
+    # Tropopausa / Baja Estratosfera (> 36,000 ft)
     else:
         alt_ft = 36089.24 - 20805.7 * np.log(p_hpa / 226.32)
 
-    # Conversión de pies a kilómetros (1 ft = 0.0003048 km)
-    alt_km = (alt_ft * 0.3048) / 1000.0
-    return round(alt_km, 1)
+    fl_exact = alt_ft / 100.0
+    return int(round(fl_exact / 10.0) * 10)
 
-# Calcula nivel de vuelo (FL) a partir del valor minimo de presión del tope nuboso
-def pressure_to_flight_level(p_hpa):
-    """Convierte presión (hPa) a Nivel de Vuelo (FL) según la atmósfera estándar ISA"""
+
+def pressure_to_altitude_km(p_hpa: float) -> float:
+    """Convierte la presión en hPa a altitud geopotencial en kilómetros (km).
+
+    Parameters
+    ----------
+    p_hpa : float
+        Presión en hectopascales.
+
+    Returns
+    -------
+    float
+        Altitud estimada en km redondeada a un decimal.
+    """
     if p_hpa <= 0 or np.isnan(p_hpa) or np.ma.is_masked(p_hpa):
         return np.nan
-    
-    # Troposfera (hasta ~36,000 pies / 226.32 hPa)
+
     if p_hpa > 226.32:
-        alt_ft = 145366.45 * (1 - (p_hpa / 1013.25)**0.190284)
-    # Tropopausa / Baja Estratosfera (por encima de ~36,000 pies)
+        alt_ft = 145366.45 * (1 - (p_hpa / 1013.25) ** 0.190284)
     else:
         alt_ft = 36089.24 - 20805.7 * np.log(p_hpa / 226.32)
-        
-    # El Nivel de Vuelo (FL) exacto (ej. 382.4)
-    fl_exact = alt_ft / 100.0
-    
-    # Convención aeronáutica: Redondear a la decena más cercana (múltiplos de 10)
-    # Ej: 382.4 -> 38.24 -> round(38) -> 38 * 10 -> 380
-    fl_rounded = int(round(fl_exact / 10.0) * 10)
-    
-    return fl_rounded
 
-def rumbo_to_arrow(angle_deg):
-    """Retorna una flecha tipográfica según el ángulo de orientación respecto al Norte."""
+    return round((alt_ft * 0.3048) / 1000.0, 1)
+
+
+def rumbo_to_arrow(angle_deg: float) -> str:
+    """Genera una flecha y acrónimo azimutal a partir del ángulo con el Norte."""
     val = angle_deg % 180.0
     if val <= 22.5 or val > 157.5:
-        return "↕ N-S"
+        return "↕ S-N"
     elif 22.5 < val <= 67.5:
-        return "↗ NE-SW"
+        return "↗ SW-NE"
     elif 67.5 < val <= 112.5:
-        return "↔ E-W"
-    else:
-        return "↘ SE-NW"
+        return "↔ W-E"
+    return "↘ NW-SE"
 
-def compute_sigmet_convex_hull_properties(poly, simplify_deg=0.08):
+
+def compute_sigmet_convex_hull_properties(
+    poly: Polygon, simplify_deg: float = 0.08) -> Dict[str, Any]:
+    """Calcula la envolvente convexa simplificada y dimensiones físicas en km.
+
+    Aplica el algoritmo Ramer-Douglas-Peucker y un rectángulo circunscrito
+    mínimo orientado para derivar ejes principales y orientación azimutal.
     """
-    Calcula el Convex Hull simplificado y sus propiedades morfológicas
-    (eje mayor, eje menor, orientación y área) en unidades físicas (km).
-    """
-    # 1. Envoltura Convexa
     hull = poly.convex_hull
-
-    # 2. Reducir cantidad de vértices para formato SIGMET (Ramer-Douglas-Peucker)
-    # tolerance en grados: ~0.05° a 0.1° (~6 a 11 km de tolerancia)
     hull_simplified = hull.simplify(tolerance=simplify_deg, preserve_topology=True)
     if not hull_simplified.is_valid or hull_simplified.geom_type != "Polygon":
         hull_simplified = hull
 
-    # 3. Factor de conversión métrica local (geodésico aproximado)
     centroid_lat = hull_simplified.centroid.y
-    lat_rad = np.radians(centroid_lat)
     km_per_deg_lat = 111.32
-    km_per_deg_lon = 111.32 * np.cos(lat_rad)
+    km_per_deg_lon = 111.32 * np.cos(np.radians(centroid_lat))
 
-    # 4. Rectángulo Mínimo Orientado (Oriented Bounding Box)
-    # Da las dimensiones principales exactas de la envoltura
     min_rect = hull_simplified.minimum_rotated_rectangle
     rect_coords = list(min_rect.exterior.coords)[:-1]
 
-    # Distancias entre lados consecutivos en km
     lados_km = []
     vectores = []
     for k in range(4):
-        p1 = rect_coords[k]
-        p2 = rect_coords[(k + 1) % 4]
+        p1, p2 = rect_coords[k], rect_coords[(k + 1) % 4]
         dx_km = (p2[0] - p1[0]) * km_per_deg_lon
         dy_km = (p2[1] - p1[1]) * km_per_deg_lat
-        dist_km = np.hypot(dx_km, dy_km)
-        lados_km.append(dist_km)
+        lados_km.append(np.hypot(dx_km, dy_km))
         vectores.append((dx_km, dy_km))
 
-    # Identificar eje mayor y eje menor
     idx_major = int(np.argmax(lados_km[:2]))
     major_axis_km = max(lados_km[0], lados_km[1])
     minor_axis_km = min(lados_km[0], lados_km[1])
 
-    # 5. Orientación respecto al Norte (Ángulo azimutal de 0° a 180°)
     dx_maj, dy_maj = vectores[idx_major]
-    # np.arctan2(dx, dy) mide el ángulo partiendo del Norte (+Y) hacia el Este (+X)
     angle_deg = np.degrees(np.arctan2(dx_maj, dy_maj)) % 180.0
-
-    # 6. Área del Convex Hull en km²
     area_hull_km2 = hull_simplified.area * km_per_deg_lon * km_per_deg_lat
 
     return {
-        "hull_polygon": hull_simplified,
-        "vertices": len(list(hull_simplified.exterior.coords)) - 1,
-        "major_axis_km": round(major_axis_km, 1),
-        "minor_axis_km": round(minor_axis_km, 1),
-        "orientation_deg": int(round(angle_deg)),
-        "area_hull_km2": round(area_hull_km2, 1),
-    }
+            "hull_polygon": hull_simplified,
+            "vertices": len(list(hull_simplified.exterior.coords)) - 1,
+            "major_axis_km": round(major_axis_km, 1),
+            "minor_axis_km": round(minor_axis_km, 1),
+            "orientation_deg": int(round(angle_deg)),
+            "area_hull_km2": round(area_hull_km2, 1),
+           }
 
-def classify_convective_morphology(area_km2, major_axis_km, minor_axis_km, max_dbz):
-    """
-    Clasifica el sistema convectivo siguiendo criterios morfológicos de radar:
-    - IC  : Isolated Cell (Celda Individual / Celda Aislada)
-    - CC  : Cluster of Cells (Clúster Convectivo Multicelular)
-    - QLCS: Quasi-Linear Convective System / Squall Line (Línea Convectiva)
-    - MCS : Mesoscale Convective System (Sistema Convectivo de Mesoescala)
-    """
-    # Evitar divisiones por cero en polígonos casi lineales o muy pequeños
+
+def classify_convective_morphology(
+    area_km2: float, major_axis_km: float, minor_axis_km: float, max_dbz: float) -> Dict[str, str]:
+    """Clasifica el sistema convectivo según su escala morfológica radar."""
     minor_axis = max(minor_axis_km, 1.0)
     aspect_ratio = major_axis_km / minor_axis
 
-    # 1. Sistemas lineales (Squall line / QLCS):
-    # Longitud significativa y eje mayor claramente dominante frente al eje menor
     if major_axis_km >= 100.0 and aspect_ratio >= 3.0:
         return {
                 "codigo": "QLCS",
-                "tipo": "Quasi-Linear Convective System / Squall Line (Línea Convectiva)",
-                "impacto": "Bloqueo transversal extenso; frentes de ráfaga y turbulencia severa lineal."
+                "tipo": "Línea Convectiva (QLCS)",
+                "impacto": "Bloqueo transversal extenso; frentes de ráfaga y turbulencia severa lineal.",
                }
-
-    # 2. Sistemas Convectivos de Mesoescala no lineales:
-    # Gran cobertura areal y gran extensión en ambas dimensiones
     elif area_km2 >= 1000.0 or (major_axis_km >= 100.0 and minor_axis_km >= 40.0):
         return {
                 "codigo": "MCS",
-                "tipo": "Mesoscale Convective System (Sistema Convectivo de Mesoescala)",
-                "impacto": "Disrupción a gran escala; desvíos estratégicos interprovinciales."
+                "tipo": "Sistema Convectivo (MCS)",
+                "impacto": "Disrupción a gran escala; desvíos estratégicos interprovinciales.",
                }
-
-    # 3. Clúster Convectivo Multicelular:
-    # Área intermedia o moderada sin eje lineal marcado
     elif area_km2 >= 400.0 or major_axis_km >= 50.0:
         return {
                 "codigo": "CC",
-                "tipo": "Cluster of Cells (Clúster Convectivo Multicelular)",
-                "impacto": "Bloqueo de aerovías locales; navegación táctica compleja entre celdas."
+                "tipo": "Clúster Multicelular",
+                "impacto": "Bloqueo de aerovías locales; navegación táctica compleja entre celdas.",
                }
-
-    # 4. Celda aislada / pulso ordinario:
-    else:
-        return {
-                "codigo": "IC",
-                "tipo": "Isolated Cell (Celda Individual / Celda Aislada)",
-                "impacto": "Desvíos tácticos directos de corto radio."
-               }
-
-# Función para Generar el Gráfico de Coordenadas Paralelas
-def plot_parallel_coordinates(metrics_df, highlight_poly_id=None):
-    """Genera el gráfico de coordenadas paralelas sincronizado con la selección del polígono."""
-    if metrics_df.empty or len(metrics_df) < 2:
-        return None
-
-    df_plot = metrics_df.copy()
-    df_plot["Orientacion_Num"] = (df_plot["Orientacion"].str.replace("°", "").astype(float))
-
-    cols_analisis = [
-                     "Area",
-                     "EjeMayor_km",
-                     "Aspect_Ratio",
-                     "Orientacion_Num",
-                     "MaxH",
-                     "MaxFL",
-                     "MaxRef",
-                     "MinCTT",
-                    ]
-
-    titulos_ejes = [
-                    "Área\n(km²)",
-                    "Eje Mayor\n(km)",
-                    "Relación\nAspecto",
-                    "Rumbo\n(°)",
-                    "Tope\n(km)",
-                    "Tope\n(FL)",
-                    "Refl. Máx\n(dBZ)",
-                    "Tope CTT\n(°C)",
-                   ]
-
-    mins = df_plot[cols_analisis].min()
-    maxs = df_plot[cols_analisis].max()
-    ranges = maxs - mins
-    ranges[ranges == 0] = 1.0
-
-    # Normalización Min-Max (0 a 1)
-    df_norm = (df_plot[cols_analisis] - mins) / ranges
-    df_norm["Tipo"] = df_plot["Tipo"]
-    df_norm["ID"] = df_plot["ID"]
-
-    color_dict = {
-                  "IC": "#2a9d8f",
-                  "CC": "#e9c46a",
-                  "QLCS": "#f4a261",
-                  "MCS": "#e76f51",
-                 }
-
-    fig, ax = plt.subplots(figsize=(13, 5.2))
-
-    has_selection = (
-                     highlight_poly_id is not None
-                     and highlight_poly_id in df_norm["ID"].values
-                    )
-
-    # 1. Trazar líneas de fondo (no seleccionadas)
-    for _, row in df_norm.iterrows():
-        is_highlight = has_selection and (row["ID"] == highlight_poly_id)
-        if is_highlight:
-            continue  # La dibujamos al final para ponerla al frente
-
-        y_vals = [row[c] for c in cols_analisis]
-
-        # Si hay algo seleccionado, atenuamos las demás líneas
-        line_color = ("#ced4da" if has_selection else color_dict.get(row["Tipo"], "gray"))
-        alpha_val = 0.20 if has_selection else 0.55
-        line_width = 1.0 if has_selection else 1.5
-
-        ax.plot(
-                range(len(cols_analisis)),
-                y_vals,
-                color=line_color,
-                linewidth=line_width,
-                alpha=alpha_val,
-                zorder=2,
-               )
-
-    # 2. Trazar la línea seleccionada (en primer plano con marcadores y etiquetas)
-    if has_selection:
-        sel_norm = df_norm[df_norm["ID"] == highlight_poly_id].iloc[0]
-        sel_real = df_plot[df_plot["ID"] == highlight_poly_id].iloc[0]
-        y_vals_sel = [sel_norm[c] for c in cols_analisis]
-
-        # Línea principal roja
-        ax.plot(
-                range(len(cols_analisis)),
-                y_vals_sel,
-                color="red",
-                linewidth=3.5,
-                alpha=1.0,
-                zorder=10,
-                marker="o",
-                markersize=7,
-                markerfacecolor="red",
-                markeredgecolor="white",
-                markeredgewidth=1.5,
-               )
-
-        # Rótulos flotantes sobre cada punto con el valor real
-        for i, col in enumerate(cols_analisis):
-            val_real = sel_real[col]
-            label_text = (
-                          f"{val_real:.0f}"
-                          if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]
-                          else f"{val_real:.1f}"
-                         )
-            ax.text(
-                    i,
-                    y_vals_sel[i] + 0.04,
-                    label_text,
-                    fontsize=9,
-                    color="red",
-                    fontweight="bold",
-                    ha="center",
-                    va="bottom",
-                    zorder=12,
-                    bbox=dict(
-                              boxstyle="round,pad=0.2",
-                              facecolor="white",
-                              edgecolor="red",
-                              alpha=0.85,
-                              linewidth=0.8,
-                             ),
-                   )
-
-    # 3. Dibujar ejes verticales y marcas numéricas
-    y_ticks_norm = [0.0, 0.25, 0.5, 0.75, 1.0]
-    for i, col in enumerate(cols_analisis):
-        ax.axvline(i, color="#adb5bd", linestyle="-", linewidth=1.2, zorder=1)
-
-        col_min = mins[col]
-        col_max = maxs[col]
-
-        for y_norm in y_ticks_norm:
-            val_real = col_min + y_norm * (col_max - col_min)
-            label_str = (
-                         f"{val_real:.0f}"
-                         if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"]
-                         else f"{val_real:.1f}"
-                        )
-
-            ax.plot(
-                    [i - 0.03, i + 0.03],
-                    [y_norm, y_norm],
-                    color="#6c757d",
-                    linewidth=0.8,
-                    zorder=2,
-                   )
-            ax.text(
-                    i - 0.05,
-                    y_norm,
-                    label_str,
-                    fontsize=8,
-                    color="#6c757d",
-                    ha="right",
-                    va="center",
-                    zorder=4,
-                   )
-
-    # 4. Ajustes estéticos finales
-    ax.set_xticks(range(len(cols_analisis)))
-    ax.set_xticklabels(titulos_ejes, fontsize=10, fontweight="bold")
-    ax.set_yticks([])
-    ax.set_xlim(-0.35, len(cols_analisis) - 0.65)
-    ax.set_ylim(-0.06, 1.14)
-
-    for spine in ["top", "bottom", "left", "right"]:
-        ax.spines[spine].set_visible(False)
-
-    ax.grid(False)
-
-    # Leyenda
-    legend_elements = [
-                       Line2D([0], [0], color=col, lw=2.5, label=tipo)
-                       for tipo, col in color_dict.items()
-                       if tipo in df_norm["Tipo"].values
-                      ]
-    if has_selection:
-        legend_elements.append(
-                               Line2D(
-                                       [0],
-                                       [0],
-                                       color="red",
-                                       lw=3.0,
-                                       marker="o",
-                                       label=f"Selección (ID: {highlight_poly_id})",
-                                     )
-                              )
-
-    ax.legend(
-                handles=legend_elements,
-                loc="upper right",
-                bbox_to_anchor=(1.0, 1.15),
-                ncol=len(legend_elements),
-                frameon=True,
-                framealpha=0.9,
-             )
-
-    plt.tight_layout()
-    return fig
+    return {
+            "codigo": "IC",
+            "tipo": "Celda Aislada",
+            "impacto": "Desvíos tácticos directos de corto radio.",
+           }
 
 # ============================================================================ #
-# 1. Funciones auxiliares de carga y procesamiento (Cacheables con Streamlit)
+# 2. Ingesta y Procesamiento de Datos (Caché Streamlit)
 # ============================================================================ #
 
 @st.cache_data(ttl=3600)
-def detect_goes_bucket(_fs, target_time):
-    """
-    Verifica si los datos de la fecha/hora existen en 'noaa-goes16'.
-    Si no encuentra archivos o el directorio está vacío, conmuta a 'noaa-goes19'.
-    """
-    year = target_time.strftime("%Y")
-    day_of_year = target_time.strftime("%j")
-    hour = target_time.strftime("%H")
-
-    # Carpeta testigo de GLM en GOES-16
-    folder_g16 = f"noaa-goes16/GLM-L2-LCFA/{year}/{day_of_year}/{hour}/"
+def detect_goes_bucket(_fs: s3fs.S3FileSystem, target_time: datetime) -> str:
+    """Detecta la disponibilidad del bucket S3 de NOAA (conmutación GOES-16/19)."""
+    year, doy, hour = target_time.strftime("%Y"), target_time.strftime("%j"), target_time.strftime("%H")
+    folder_g16 = f"noaa-goes16/GLM-L2-LCFA/{year}/{doy}/{hour}/"
     try:
-        sample_files = _fs.ls(folder_g16)
-        if len(sample_files) > 0:
+        if len(_fs.ls(folder_g16)) > 0:
             return "noaa-goes16"
     except Exception:
         pass
-
-    # Si falló o no hay archivos, conmuta a GOES-19
     return "noaa-goes19"
 
+
 @st.cache_data(ttl=3600)
-def get_glm_files_for_window(_fs, start_time, bucket_name, minutes=5):
+def get_glm_files_for_window(
+    _fs: s3fs.S3FileSystem, start_time: datetime, bucket_name: str, minutes: int = 5) -> List[str]:
+    """Obtiene la lista de archivos GLM de 20 segundos para la ventana dada."""
     all_files = []
     num_steps = (minutes * 60) // 20
     for i in range(num_steps):
@@ -438,617 +252,605 @@ def get_glm_files_for_window(_fs, start_time, bucket_name, minutes=5):
         time_prefix = current_time.strftime("s%Y%j%H%M%S")
         folder_path = f"{bucket_name}/GLM-L2-LCFA/{current_time.strftime('%Y/%j/%H/')}"
         try:
-            matching_files = _fs.glob(f"{folder_path}*_{time_prefix}*")
-            all_files.extend(matching_files)
+            all_files.extend(_fs.glob(f"{folder_path}*_{time_prefix}*"))
         except Exception:
             continue
     return all_files
 
-@st.cache_data(ttl=3600)
-def get_abi_c13_file(_fs, target_time, bucket_name):
-    time_prefix = target_time.strftime("s%Y%j%H%M")
-    folder_path = f"{bucket_name}/ABI-L2-CMIPF/{target_time.strftime('%Y/%j/%H/')}"
-    files = _fs.glob(f"{folder_path}*C13_*_{time_prefix}*")
-    return files[0] if files else None
 
 @st.cache_data(ttl=3600)
-def get_abi_ctp_file(_fs, target_time, bucket_name):
-    time_prefix = target_time.strftime("s%Y%j%H%M")
-    folder_path = f"{bucket_name}/ABI-L2-CTPF/{target_time.strftime('%Y/%j/%H/')}"
-    files = _fs.glob(f"{folder_path}*CTPF*_{time_prefix}*")
+def get_abi_c13_file(_fs: s3fs.S3FileSystem, target_time: datetime, bucket_name: str) -> Optional[str]:
+    """Localiza el archivo C13 (IR Onda Larga) en S3 más próximo al timestamp."""
+    prefix = target_time.strftime("s%Y%j%H%M")
+    folder = f"{bucket_name}/ABI-L2-CMIPF/{target_time.strftime('%Y/%j/%H/')}"
+    files = _fs.glob(f"{folder}*C13_*_{prefix}*")
     return files[0] if files else None
+
+
+@st.cache_data(ttl=3600)
+def get_abi_ctp_file(_fs: s3fs.S3FileSystem, target_time: datetime, bucket_name: str) -> Optional[str]:
+    """Localiza el producto CTPF (Cloud Top Pressure) correspondiente."""
+    prefix = target_time.strftime("s%Y%j%H%M")
+    folder = f"{bucket_name}/ABI-L2-CTPF/{target_time.strftime('%Y/%j/%H/')}"
+    files = _fs.glob(f"{folder}*CTPF*_{prefix}*")
+    return files[0] if files else None
+
 
 @st.cache_data
-def cluster_and_get_polygons(reflectivity_data, threshold_dbz, lon_mesh, lat_mesh, min_area_km2=100):
-
-    thresholded_data = reflectivity_data >= threshold_dbz
-    labeled_array, num_features = label(thresholded_data)
-
+def cluster_and_get_polygons(
+    reflectivity_data: np.ndarray,
+    threshold_dbz: float,
+    lon_mesh: np.ndarray,
+    lat_mesh: np.ndarray,
+    min_area_km2: float = 100.0,) -> List[Polygon]:
+    """Segmenta núcleos convectivos y los transforma en polígonos cerrados."""
+    thresholded = reflectivity_data >= threshold_dbz
+    labeled_arr, num_features = label(thresholded)
     polygons = []
+
     if num_features == 0:
         return polygons
 
     for i in range(1, num_features + 1):
-        current_cluster_mask = labeled_array == i
-        contours = find_contours(current_cluster_mask, level=0.5)
+        for contour in find_contours(labeled_arr == i, level=0.5):
+            r = np.clip(np.round(contour[:, 0]).astype(int), 0, reflectivity_data.shape[0] - 1)
+            c = np.clip(np.round(contour[:, 1]).astype(int), 0, reflectivity_data.shape[1] - 1)
 
-        for contour_idx, contour in enumerate(contours):
-            r_indices = np.clip(np.round(contour[:, 0]).astype(int), 0, reflectivity_data.shape[0] - 1)
-            c_indices = np.clip(np.round(contour[:, 1]).astype(int), 0, reflectivity_data.shape[1] - 1)
+            lons, lats = lon_mesh[r, c], lat_mesh[r, c]
+            if len(lons) > 2:
+                if lons[0] != lons[-1] or lats[0] != lats[-1]:
+                    lons = np.append(lons, lons[0])
+                    lats = np.append(lats, lats[0])
 
-            lon_coords = lon_mesh[r_indices, c_indices]
-            lat_coords = lat_mesh[r_indices, c_indices]
+                poly = Polygon(zip(lons, lats))
+                if not poly.is_valid:
+                    poly = poly.buffer(0)
 
-            if lon_coords.size > 0 and (lon_coords[0] != lon_coords[-1] or lat_coords[0] != lat_coords[-1]):
-                lon_coords = np.append(lon_coords, lon_coords[0])
-                lat_coords = np.append(lat_coords, lat_coords[0])
-                
-            if len(lon_coords) > 2:
-                poly_coords = list(zip(lon_coords, lat_coords))
-                
-                try:
-                    poly = Polygon(poly_coords)
-                    
-                    # Reparar polígonos inválidos
-                    if not poly.is_valid:
-                        poly = poly.buffer(0)
-                        
-                    if not poly.is_empty:
-                        # Calcular el área directamente con la geometría de Shapely
-                        # poly.area devuelve grados cuadrados. Lo pasamos a km2 usando el centroide:
-                        lat_rad = np.radians(poly.centroid.y)
-                        area_geom_km2 = poly.area * 111.32 * (111.32 * np.cos(lat_rad))
-                        
-                        # Guardar solo si supera el umbral de área
-                        if area_geom_km2 >= min_area_km2:
-                            polygons.append(poly)
-                            
-                except Exception as e:
-                    st.warning(f"Error creando Polígono del contorno: {e}")
-
+                if not poly.is_empty:
+                    lat_rad = np.radians(poly.centroid.y)
+                    area_km2 = poly.area * 111.32 * (111.32 * np.cos(lat_rad))
+                    if area_km2 >= min_area_km2:
+                        polygons.append(poly)
     return polygons
 
-@st.cache_resource 
-def load_shape_features(path_shp):
+
+@st.cache_resource
+def load_shape_features(path_shp: str) -> Optional[ShapelyFeature]:
+    """Carga shapefiles geográficos como features vectoriales para Cartopy."""
     try:
         return ShapelyFeature(Reader(path_shp).geometries(), ccrs.PlateCarree())
     except Exception as e:
         st.error(f"Error cargando shapefile {path_shp}: {e}")
         return None
 
-@st.cache_data 
-def load_airport_data(path_csv):
+
+@st.cache_data
+def load_airport_data(path_csv: str) -> pd.DataFrame:
+    """Carga la base de puntos ICAO y coordenadas de aeropuertos."""
     try:
-        return pd.read_csv(path_csv,
-                           sep=r'\s+',
-                           header=None,
-                           names=['Codigo ICAO','Lat','Lon'])
+        return pd.read_csv(
+            path_csv, sep=r"\s+", header=None, names=["Codigo ICAO", "Lat", "Lon"]
+        )
     except Exception as e:
-        st.error(f"Error cargando datos de aeropuertos {path_csv}: {e}")
+        st.error(f"Error cargando datos de aeropuertos: {e}")
         return pd.DataFrame()
 
-@st.cache_data(ttl=3600) 
-def load_and_process_data(start_window_datetime, _fs_param):
-    
-    # --- Límites espaciales para lectura de datos (NOTA: no son los mismo limites que para la visualizacion) ---
-    lat_min, lat_max = -47.0, -18.5
-    lon_min, lon_max = -75.5, -37.0
-    
-    # --- Limites para filtrar polígonos fuera del área de visualización ---
-    lat_min_plot, lat_max_plot = -45.0, -19.0
-    lon_min_plot, lon_max_plot = -75.0, -50.0
 
-    # --- RUTAS RELATIVAS A LOS ARCHIVOS DE DATOS EN TU REPOSITORIO GITHUB ---
-    #path_shape_depto_rel     = './data/shp_arg/operativo/departamentos_edit.shp'
-    #path_shape_prov_rel      = './data/shp_arg/operativo/provincias_edit.shp'
-    path_shape_paises_rel    = './data/shp_arg/cartopy/10m_admin_0_countries.shp'
-    path_dir_FIR_rel         = './data/fir_txt/FIR_aeropuertos.txt' 
-    path_fir_ezeiza_rel      = './data/shp_arg/FIR/FIR_EZEIZA_backup.shp'
-    path_fir_cordoba_rel     = './data/shp_arg/FIR/FIR_CORDOBA.shp'
-    path_fir_resistencia_rel = './data/shp_arg/FIR/FIR_RESISTENCIA.shp'
-    path_fir_mendoza_rel     = './data/shp_arg/FIR/FIR_MENDOZA.shp'
-    path_fir_comodoro_rel    = './data/shp_arg/FIR/FIR_COMODORO.shp'
+@st.cache_data(ttl=3600)
+def load_and_process_data(
+    start_window_datetime: datetime, _fs_param: s3fs.S3FileSystem) -> Optional[Dict[str, Any]]:
+    """Pipeline de ingesta, cálculo proxy y segmentación morfológica."""
+    bounds = SPATIAL_BOUNDS
 
-    paises          = load_shape_features(path_shape_paises_rel)
-    df_airports     = load_airport_data(path_dir_FIR_rel)
-    fir_ezeiza      = load_shape_features(path_fir_ezeiza_rel)
-    fir_cordoba     = load_shape_features(path_fir_cordoba_rel)
-    fir_resistencia = load_shape_features(path_fir_resistencia_rel)
-    fir_mendoza     = load_shape_features(path_fir_mendoza_rel)
-    fir_comodoro    = load_shape_features(path_fir_comodoro_rel)
-    
-    # --- Detección automática del satélite (GOES-16 vs GOES-19) ---
+    # Detección del satélite activo
     bucket_name = detect_goes_bucket(_fs_param, start_window_datetime)
     sat_label = "GOES-16" if "16" in bucket_name else "GOES-19"
 
-    # --- Carga y preprocesamiento de datos GLM y ABI ---
-    glm_files = get_glm_files_for_window(_fs_param, start_window_datetime, bucket_name=bucket_name, minutes=5)
-    abi_file  = get_abi_c13_file(_fs_param, start_window_datetime, bucket_name=bucket_name)
-    ctp_file  = get_abi_ctp_file(_fs_param, start_window_datetime, bucket_name=bucket_name)
+    glm_files = get_glm_files_for_window(_fs_param, start_window_datetime, bucket_name, minutes=5)
+    abi_file = get_abi_c13_file(_fs_param, start_window_datetime, bucket_name)
+    ctp_file = get_abi_ctp_file(_fs_param, start_window_datetime, bucket_name)
 
-    if not glm_files:
-        st.warning(f"No se encontraron archivos GLM para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
-        return None 
-    if abi_file is None:
-        st.warning(f"No se encontró archivo ABI-C13 para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
+    if not glm_files or abi_file is None or ctp_file is None:
+        st.warning(f"Datos satelitales incompletos para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
         return None
-    if ctp_file is None:
-        st.warning(f"No se encontró archivo ABI-CTP para {start_window_datetime.strftime('%Y-%m-%d %H:%M UTC')}")
-        return None 
 
-    # --- Leer y recortar GLM al vuelo ---
-    accumulated_lats = []
-    accumulated_lons = []
-    for file_path in glm_files:
-        with _fs_param.open(file_path, "rb") as f:
+    # Recorte e ingesta GLM
+    accum_lats, accum_lons = [], []
+    for fp in glm_files:
+        with _fs_param.open(fp, "rb") as f:
             with Dataset("dummy", mode="r", memory=f.read()) as nc:
                 lats = nc.variables["flash_lat"][:]
                 lons = nc.variables["flash_lon"][:]
-                # Aplicar máscara espacial
-                mask = (lats >= lat_min) & (lats <= lat_max) & (lons >= lon_min) & (lons <= lon_max)
-                accumulated_lats.extend(lats[mask])
-                accumulated_lons.extend(lons[mask])
+                m = (
+                    (lats >= bounds["data_lat_min"])
+                    & (lats <= bounds["data_lat_max"])
+                    & (lons >= bounds["data_lon_min"])
+                    & (lons <= bounds["data_lon_max"])
+                )
+                accum_lats.extend(lats[m])
+                accum_lons.extend(lons[m])
 
-    all_lats = np.array(accumulated_lats)
-    all_lons = np.array(accumulated_lons)
+    all_lats, all_lons = np.array(accum_lats), np.array(accum_lons)
 
-    # --- Leer y recortar ABI al vuelo (resolucione espacial de 2 km) ---
+    # Recorte ABI C13
     with _fs_param.open(abi_file, "rb") as f:
         with Dataset("dummy", mode="r", memory=f.read()) as nc:
             proj_info = nc.variables["goes_imager_projection"]
             h = proj_info.perspective_point_height
-            x_rad = nc.variables["x"][:]
-            y_rad = nc.variables["y"][:]
-            x_full = x_rad * h
-            y_full = y_rad * h
-            abi_crs = ccrs.Geostationary(central_longitude=proj_info.longitude_of_projection_origin, satellite_height=h)
-            
-            # Transformar límites a proyección geoestacionaria
-            point_ul = abi_crs.transform_point(lon_min, lat_max, ccrs.PlateCarree())
-            point_lr = abi_crs.transform_point(lon_max, lat_min, ccrs.PlateCarree())
-            
-            x_min_proj, x_max_proj = point_ul[0], point_lr[0]
-            y_min_proj, y_max_proj = point_lr[1], point_ul[1] # Eje Y invertido en GOES
+            x_full = nc.variables["x"][:] * h
+            y_full = nc.variables["y"][:] * h
+            abi_crs = ccrs.Geostationary(
+                central_longitude=proj_info.longitude_of_projection_origin,
+                satellite_height=h,
+            )
+
+            pt_ul = abi_crs.transform_point(bounds["data_lon_min"], bounds["data_lat_max"], ccrs.PlateCarree())
+            pt_lr = abi_crs.transform_point(bounds["data_lon_max"], bounds["data_lat_min"], ccrs.PlateCarree())
+            x_min_proj, x_max_proj = pt_ul[0], pt_lr[0]
+            y_min_proj, y_max_proj = pt_lr[1], pt_ul[1]
 
             idx_x = np.where((x_full >= x_min_proj) & (x_full <= x_max_proj))[0]
             idx_y = np.where((y_full >= y_min_proj) & (y_full <= y_max_proj))[0]
-            
-            if len(idx_x) > 0 and len(idx_y) > 0:
-                x_start, x_end = idx_x[0], idx_x[-1] + 1
-                y_start, y_end = idx_y[0], idx_y[-1] + 1
-                
-                # Cargar solo el subconjunto de la matriz CMI
-                ir_data = nc.variables["CMI"][y_start:y_end, x_start:x_end] - 273.15
-                x = x_full[x_start:x_end]
-                y = y_full[y_start:y_end]
-            else:
-                ir_data, x, y = None, None, None
-          
-    # --- Leer y recortar ACTPF usando sus propias coordenadas pues la resolucion espacial es de 10 km ---
+
+            xs, xe = idx_x[0], idx_x[-1] + 1
+            ys, ye = idx_y[0], idx_y[-1] + 1
+            ir_data = nc.variables["CMI"][ys:ye, xs:xe] - 273.15
+            x, y = x_full[xs:xe], y_full[ys:ye]
+
+    # Recorte ABI CTP (resolución 10 km)
     ctp_data, x_ctp, y_ctp = None, None, None
-    if ctp_file is not None and len(idx_x) > 0 and len(idx_y) > 0:
-        try:
-            with _fs_param.open(ctp_file, "rb") as f:
-                with Dataset("dummy_ctp", mode="r", memory=f.read()) as nc_ctp:
-                    # Extraer resolución de proyección específica del CTPF
-                    h_ctp = nc_ctp.variables["goes_imager_projection"].perspective_point_height
-                    x_full_ctp = nc_ctp.variables["x"][:] * h_ctp
-                    y_full_ctp = nc_ctp.variables["y"][:] * h_ctp
-                    
-                    # Buscar índices en la grilla del CTPF
-                    idx_x_act = np.where((x_full_ctp >= x_min_proj) & (x_full_ctp <= x_max_proj))[0]
-                    idx_y_act = np.where((y_full_ctp >= y_min_proj) & (y_full_ctp <= y_max_proj))[0]
-                    
-                    if len(idx_x_act) > 0 and len(idx_y_act) > 0:
-                        xs_a, xe_a = idx_x_act[0], idx_x_act[-1] + 1
-                        ys_a, ye_a = idx_y_act[0], idx_y_act[-1] + 1
-                        
-                        ctp_data = nc_ctp.variables["PRES"][ys_a:ye_a, xs_a:xe_a]
-                        x_ctp = x_full_ctp[xs_a:xe_a]
-                        y_ctp = y_full_ctp[ys_a:ye_a]
-        except Exception as e:
-            st.warning(f"No se pudo procesar CTP: {e}")
+    try:
+        with _fs_param.open(ctp_file, "rb") as f:
+            with Dataset("dummy_ctp", mode="r", memory=f.read()) as nc_ctp:
+                h_ctp = nc_ctp.variables["goes_imager_projection"].perspective_point_height
+                x_full_ctp = nc_ctp.variables["x"][:] * h_ctp
+                y_full_ctp = nc_ctp.variables["y"][:] * h_ctp
+                idx_x_act = np.where((x_full_ctp >= x_min_proj) & (x_full_ctp <= x_max_proj))[0]
+                idx_y_act = np.where((y_full_ctp >= y_min_proj) & (y_full_ctp <= y_max_proj))[0]
+                xs_a, xe_a = idx_x_act[0], idx_x_act[-1] + 1
+                ys_a, ye_a = idx_y_act[0], idx_y_act[-1] + 1
+                ctp_data = nc_ctp.variables["PRES"][ys_a:ye_a, xs_a:xe_a]
+                x_ctp, y_ctp = x_full_ctp[xs_a:xe_a], y_full_ctp[ys_a:ye_a]
+    except Exception as e:
+        st.warning(f"Error procesando CTP: {e}")
 
-    grid_res_high = 0.05
-    lat_bins_high = np.arange(lat_min, lat_max + grid_res_high, grid_res_high)
-    lon_bins_high = np.arange(lon_min, lon_max + grid_res_high, grid_res_high)
-
-    fed_high, _, _ = np.histogram2d(all_lats, all_lons, bins=[lat_bins_high, lon_bins_high])
-    fed_smoothed   = gaussian_filter(fed_high, sigma=1.5)
+    # Grilla FED y estimación empírica de Reflectividad Proxy
+    res = 0.05
+    lat_bins = np.arange(bounds["data_lat_min"], bounds["data_lat_max"] + res, res)
+    lon_bins = np.arange(bounds["data_lon_min"], bounds["data_lon_max"] + res, res)
+    fed_raw, _, _ = np.histogram2d(all_lats, all_lons, bins=[lat_bins, lon_bins])
+    fed_smoothed = gaussian_filter(fed_raw, sigma=1.5)
 
     max_reflectivity_proxy = np.zeros_like(fed_smoothed)
-    mask = fed_smoothed > 0.02
-    
-    # Modelos REF-FED
-    # max_reflectivity_proxy[mask] = 33.0 + 10.0 * np.log10(fed_smoothed[mask])
-    max_reflectivity_proxy[mask] = 42.2 + 12.4 * np.log10(fed_smoothed[mask])
-    # max_reflectivity_proxy[mask] = 44.6 + 23.5 * np.log10(fed_smoothed[mask]) + 8.6 * np.power(np.log10(fed_smoothed[mask]),2)
+    mask_fed = fed_smoothed > 0.02
+    max_reflectivity_proxy[mask_fed] = 42.2 + 12.4 * np.log10(fed_smoothed[mask_fed])
 
-    lon_mesh_high, lat_mesh_high = np.meshgrid(
-                            					   (lon_bins_high[:-1] + lon_bins_high[1:]) / 2,
-                            					   (lat_bins_high[:-1] + lat_bins_high[1:]) / 2
-                            					  )
+    lon_mesh, lat_mesh = np.meshgrid((lon_bins[:-1] + lon_bins[1:]) / 2, (lat_bins[:-1] + lat_bins[1:]) / 2)
 
-    # --- Detección de Polígonos de Advertencia y Métricas ---
-    warning_threshold_dbz = 25
-    warning_polygons = cluster_and_get_polygons(
-                                                max_reflectivity_proxy,
-                                                warning_threshold_dbz,
-                                                lon_mesh_high,
-                                                lat_mesh_high
-                                               )
+    # Segmentación y filtrado espacial
+    raw_polys = cluster_and_get_polygons(max_reflectivity_proxy, 25, lon_mesh, lat_mesh)
+    plot_box = box(bounds["plot_lon_min"], bounds["plot_lat_min"], bounds["plot_lon_max"], bounds["plot_lat_max"])
+    warning_polygons = [p for p in raw_polys if p.intersects(plot_box)]
 
-    # --- Crear un bounding box con los límites del mapa ---
-    plot_bbox = box(lon_min_plot, lat_min_plot, lon_max_plot, lat_max_plot)
-    
-    # --- Conservar solo los polígonos que intersectan con el área visible ---
-    warning_polygons = [poly for poly in warning_polygons if poly.intersects(plot_bbox)]
+    metrics_list, sigmet_hulls = [], []
+    grid_points = [Point(lo, la) for lo, la in zip(lon_mesh.flatten(), lat_mesh.flatten())]
 
-    metrics_list = []
-    
-    if warning_polygons and ir_data is not None:
-        
-        lon_flat = lon_mesh_high.flatten()
-        lat_flat = lat_mesh_high.flatten()
-        grid_points = [Point(lon, lat) for lon, lat in zip(lon_flat, lat_flat)]
-        
-        sigmet_hulls = []
+    for idx, poly in enumerate(warning_polygons):
+        poly_id = idx + 1
+        hull_info = compute_sigmet_convex_hull_properties(poly, simplify_deg=0.08)
+        sigmet_hulls.append(hull_info["hull_polygon"])
 
-        for idx, poly in enumerate(warning_polygons):
-            
-            poly_id = idx + 1
-            
-            centroid_lon = poly.centroid.x
-            centroid_lat = poly.centroid.y
+        refl_vals, ctt_vals, fed_vals, ctp_vals = [], [], [], []
+        for i_flat, pt in enumerate(grid_points):
+            if poly.contains(pt):
+                r_idx, c_idx = np.unravel_index(i_flat, max_reflectivity_proxy.shape)
+                refl_vals.append(max_reflectivity_proxy[r_idx, c_idx])
+                fed_vals.append(fed_smoothed[r_idx, c_idx])
 
-            # --- Calcular Convex Hull simplificado y métricas morfológicas ---
-            hull_info = compute_sigmet_convex_hull_properties(poly, simplify_deg=0.08)
-            sigmet_poly = hull_info["hull_polygon"]
-            sigmet_hulls.append(sigmet_poly)
+                x_t, y_t = abi_crs.transform_point(
+                    lon_mesh[r_idx, c_idx], lat_mesh[r_idx, c_idx], ccrs.PlateCarree()
+                )
+                ctt_vals.append(ir_data[np.argmin(np.abs(y - y_t)), np.argmin(np.abs(x - x_t))])
 
-            reflectivity_values_in_poly = []
-            ir_temps_in_poly = []
-            fed_values_in_poly = []
-            ctp_values_in_poly = []
-            num_pixels = 0
+                if ctp_data is not None and x_ctp is not None and y_ctp is not None:
+                    p_val = ctp_data[np.argmin(np.abs(y_ctp - y_t)), np.argmin(np.abs(x_ctp - x_t))]
+                    if not np.ma.is_masked(p_val) and not np.isnan(p_val):
+                        ctp_vals.append(p_val)
 
-            for i_flat in range(len(grid_points)):
-                
-                current_point = grid_points[i_flat]
-                
-                # Evaluamos contenido con el polígono original de reflectividad
-                if poly.contains(current_point):
-                    
-                    num_pixels += 1
-                    r, c = np.unravel_index(i_flat, max_reflectivity_proxy.shape)
+        max_refl = np.max(refl_vals) if refl_vals else np.nan
+        min_pres = np.min(ctp_vals) if ctp_vals else np.nan
+        morph = classify_convective_morphology(
+            hull_info["area_hull_km2"], hull_info["major_axis_km"], hull_info["minor_axis_km"], max_refl
+        )
 
-                    reflectivity_values_in_poly.append(max_reflectivity_proxy[r, c])
-                    fed_values_in_poly.append(fed_smoothed[r, c])
-
-                    x_transformed, y_transformed = abi_crs.transform_point(
-                                                                           lon_mesh_high[r, c],
-                                                                           lat_mesh_high[r, c],
-                                                                           ccrs.PlateCarree(),
-                                                                          )
-                    idx_x_abi = np.argmin(np.abs(x - x_transformed))
-                    idx_y_abi = np.argmin(np.abs(y - y_transformed))
-                    ir_temps_in_poly.append(ir_data[idx_y_abi, idx_x_abi])
-
-                    if (ctp_data is not None and x_ctp is not None and y_ctp is not None):
-                        idx_x_act = np.argmin(np.abs(x_ctp - x_transformed))
-                        idx_y_act = np.argmin(np.abs(y_ctp - y_transformed))
-                        val_pres = ctp_data[idx_y_act, idx_x_act]
-                        if not np.ma.is_masked(val_pres) and not np.isnan(val_pres):
-                            ctp_values_in_poly.append(val_pres)
-
-            max_reflectivity = (
-                                np.max(reflectivity_values_in_poly)
-                                if reflectivity_values_in_poly
-                                else np.nan
-                               )
-            max_fed = (np.max(fed_values_in_poly) if fed_values_in_poly else np.nan)
-            min_ir_temp = (np.min(ir_temps_in_poly) if ir_temps_in_poly else np.nan)
-            
-            # --- Clasificación Morfológica Tipo Radar ---
-            area_sigmet_km2 = hull_info["area_hull_km2"]
-            clasi = classify_convective_morphology(
-                                                    area_km2=area_sigmet_km2,
-                                                    major_axis_km=hull_info["major_axis_km"],
-                                                    minor_axis_km=hull_info["minor_axis_km"],
-                                                    max_dbz=max_reflectivity
-                                                  )
-            categoria_codigo = clasi["codigo"]
-            categoria_desc   = clasi["tipo"]
-            categoria_impacto = clasi["impacto"]
-            # --------------------------------------------         
-
-            min_ctp = np.min(ctp_values_in_poly) if ctp_values_in_poly else np.nan
-            max_fl = pressure_to_flight_level(min_ctp)
-            max_h_km = pressure_to_altitude_km(min_ctp)
-            
-            metrics_list.append({
-                                 'ID': poly_id,
-                                 'CenLon': centroid_lon,
-                                 'CenLat': centroid_lat,
-                                 'Area': area_sigmet_km2,
-                                 'Tipo': categoria_codigo,  # 'IC', 'CC', 'QLCS', 'MCS'
-                                 'Descripcion': categoria_desc, # Nombre completo para la UI
-                                 'Impacto': categoria_impacto,
-                                 'Aspect_Ratio': round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
-                                 'EjeMayor_km': hull_info["major_axis_km"],
-                                 'EjeMenor_km': hull_info["minor_axis_km"],
-                                 'Orientacion': f"{hull_info['orientation_deg']:03d}°",
-                                 'MaxRef': round(max_reflectivity, 1),
-                                 'MaxFED': round(max_fed, 1),
-                                 'MinCTT': round(min_ir_temp, 1),
-                                 'MaxFL': max_fl,
-                                 "MaxH": max_h_km,
-                                })
-
-        # Reemplazamos los polígonos originales por las envolturas SIGMET
-        warning_polygons = sigmet_hulls
-
-    metrics_df = pd.DataFrame(metrics_list)
+        metrics_list.append({
+                                "ID": poly_id,
+                                "CenLon": poly.centroid.x,
+                                "CenLat": poly.centroid.y,
+                                "Area": hull_info["area_hull_km2"],
+                                "Tipo": morph["codigo"],
+                                "Descripcion": morph["tipo"],
+                                "Impacto": morph["impacto"],
+                                "Aspect_Ratio": round(hull_info["major_axis_km"] / max(hull_info["minor_axis_km"], 1.0), 2),
+                                "EjeMayor_km": hull_info["major_axis_km"],
+                                "EjeMenor_km": hull_info["minor_axis_km"],
+                                "Orientacion": f"{hull_info['orientation_deg']:03d}°",
+                                "MaxRef": round(max_refl, 1),
+                                "MaxFED": round(np.max(fed_vals), 1) if fed_vals else np.nan,
+                                "MinCTT": round(np.min(ctt_vals), 1) if ctt_vals else np.nan,
+                                "MaxFL": pressure_to_flight_level(min_pres),
+                                "MaxH_km": pressure_to_altitude_km(min_pres),
+                             })
 
     return {
-        		"sat_label": sat_label,
-            "warning_polygons": warning_polygons,
-        		"metrics_df": metrics_df,
-        		"ir_data": ir_data,
-        		"x": x,
-        		"y": y,
-        		"abi_crs": abi_crs,
-        		"max_reflectivity_proxy": max_reflectivity_proxy,
-        		"lon_mesh_high": lon_mesh_high,
-        		"lat_mesh_high": lat_mesh_high,
-        		"lon_min": lon_min,
-        		"lon_max": lon_max,
-        		"lat_min": lat_min,
-        		"lat_max": lat_max,
-        		"paises": paises,
-        		"fir_ezeiza": fir_ezeiza,
-        		"fir_cordoba": fir_cordoba,
-        		"fir_resistencia": fir_resistencia,
-        		"fir_mendoza": fir_mendoza,
-        		"fir_comodoro": fir_comodoro,
-        		"df_airports": df_airports,
-        		"start_window": start_window_datetime
+            "sat_label": sat_label,
+            "warning_polygons": sigmet_hulls,
+            "metrics_df": pd.DataFrame(metrics_list),
+            "ir_data": ir_data,
+            "x": x,
+            "y": y,
+            "abi_crs": abi_crs,
+            "max_reflectivity_proxy": max_reflectivity_proxy,
+            "lon_mesh": lon_mesh,
+            "lat_mesh": lat_mesh,
+            "paises": load_shape_features(SHAPEFILE_PATHS["paises"]),
+            "fir_ezeiza": load_shape_features(SHAPEFILE_PATHS["fir_ezeiza"]),
+            "fir_cordoba": load_shape_features(SHAPEFILE_PATHS["fir_cordoba"]),
+            "fir_resistencia": load_shape_features(SHAPEFILE_PATHS["fir_resistencia"]),
+            "fir_mendoza": load_shape_features(SHAPEFILE_PATHS["fir_mendoza"]),
+            "fir_comodoro": load_shape_features(SHAPEFILE_PATHS["fir_comodoro"]),
+            "df_airports": load_airport_data(SHAPEFILE_PATHS["airports"]),
+            "start_window": start_window_datetime,
            }
 
 # ============================================================================ #
-# 2. Función para dibujar el mapa                                             #
+# 3. Funciones de Renderizado Gráfico
 # ============================================================================ #
 
 def plot_interactive_map_streamlit(
-                				       warning_polygons, metrics_df, ir_data, x, y, abi_crs,
-                				       max_reflectivity_proxy, lon_mesh_high, lat_mesh_high,
-                				       lon_min, lon_max, lat_min, lat_max,
-                				       paises, fir_ezeiza, fir_cordoba, fir_resistencia, fir_mendoza, fir_comodoro,
-                				       df_airports, start_window,
-                				       highlight_poly_id=None
-                				      ):
-				  
+    warning_polygons: List[Polygon],
+    metrics_df: pd.DataFrame,
+    ir_data: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
+    abi_crs: ccrs.Geostationary,
+    max_reflectivity_proxy: np.ndarray,
+    lon_mesh: np.ndarray,
+    lat_mesh: np.ndarray,
+    paises: Optional[ShapelyFeature],
+    fir_ezeiza: Optional[ShapelyFeature],
+    fir_cordoba: Optional[ShapelyFeature],
+    fir_resistencia: Optional[ShapelyFeature],
+    fir_mendoza: Optional[ShapelyFeature],
+    fir_comodoro: Optional[ShapelyFeature],
+    df_airports: pd.DataFrame,
+    start_window: datetime,
+    highlight_poly_id: Optional[int] = None,) -> plt.Figure:
+    """Renderiza el mapa aeronáutico regional con Cartopy y Matplotlib."""
     fig = plt.figure(figsize=(12, 12))
     ax = fig.add_subplot(111, projection=ccrs.Mercator())
+    b = SPATIAL_BOUNDS
+    ax.set_extent([b["plot_lon_min"], b["plot_lon_max"], b["plot_lat_min"], b["plot_lat_max"]], crs=ccrs.PlateCarree())
 
-    # Límites espaciales para visualización
-    lat_min_plot, lat_max_plot = -45.0, -19.0
-    lon_min_plot, lon_max_plot = -75.0, -50.0
-    ax.set_extent([lon_min_plot, lon_max_plot, lat_min_plot, lat_max_plot], crs=ccrs.PlateCarree())
-    
     if ir_data is not None:
         ax.imshow(
-                  ir_data, origin="upper",
+                  ir_data,
+                  origin="upper",
                   extent=[x.min(), x.max(), y.min(), y.max()],
                   transform=abi_crs,
-                  cmap="Greys", vmin=-90, vmax=40, zorder=1
+                  cmap="Greys",
+                  vmin=-90,
+                  vmax=40,
+                  zorder=1,
                  )
 
     proxy_masked = np.ma.masked_where(max_reflectivity_proxy < 20, max_reflectivity_proxy)
-
     im_proxy = ax.pcolormesh(
-                             lon_mesh_high, lat_mesh_high, proxy_masked,
-                             cmap=cmap_aviation, norm=norm_aviation,
-                             alpha=0.75, transform=ccrs.PlateCarree(), zorder=2
+                             lon_mesh,
+                             lat_mesh,
+                             proxy_masked,
+                             cmap=CMAP_AVIATION,
+                             norm=NORM_AVIATION,
+                             alpha=0.75,
+                             transform=ccrs.PlateCarree(),
+                             zorder=2,
                             )
 
-    if paises is not None: ax.add_feature(paises, facecolor='None', edgecolor='#778da9', linewidth=1)
-    if fir_ezeiza is not None: ax.add_feature(fir_ezeiza, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
-    if fir_cordoba is not None: ax.add_feature(fir_cordoba, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
-    if fir_resistencia is not None: ax.add_feature(fir_resistencia, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
-    if fir_mendoza is not None: ax.add_feature(fir_mendoza, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
-    if fir_comodoro is not None: ax.add_feature(fir_comodoro, facecolor='None', edgecolor='#072ac8', linewidth=1, zorder=2)
-               
+    # Capas vectoriales FIR y división política
+    if paises:
+        ax.add_feature(paises, facecolor="none", edgecolor="#778da9", linewidth=1)
+    for fir in [fir_ezeiza, fir_cordoba, fir_resistencia, fir_mendoza, fir_comodoro]:
+        if fir:
+            ax.add_feature(fir, facecolor="none", edgecolor="#072ac8", linewidth=1, zorder=2)
+
+    # Aeródromos ICAO
     if not df_airports.empty:
-        for i, type_code in enumerate(df_airports['Codigo ICAO'].values):
-            px = df_airports['Lon'].values[i]
-            py = df_airports['Lat'].values[i]
-            if (lon_min_plot < px < lon_max_plot) and (lat_min_plot < py < lat_max_plot):
-                plt.scatter(px, py, marker='s', s=12, color='#072ac8', zorder=5, transform=ccrs.PlateCarree())
-                plt.text(px + 0.15, py - 0.21, type_code, fontsize=8, c='#072ac8', clip_on=True, zorder=5, transform=ccrs.PlateCarree())
+        for _, ap in df_airports.iterrows():
+            if (b["plot_lon_min"] < ap.Lon < b["plot_lon_max"]) and (b["plot_lat_min"] < ap.Lat < b["plot_lat_max"]):
+                ax.scatter(ap.Lon, ap.Lat, marker="s", s=12, color="#072ac8", zorder=5, transform=ccrs.PlateCarree())
+                ax.text(
+                        ap.Lon + 0.15,
+                        ap.Lat - 0.21,
+                        ap["Codigo ICAO"],
+                        fontsize=8,
+                        c="#072ac8",
+                        clip_on=True,
+                        zorder=5,
+                        transform=ccrs.PlateCarree(),
+                       )
 
-    cbar_proxy = plt.colorbar(
-                			      im_proxy, ax=ax, orientation="horizontal", pad=0.01, shrink=0.65,
-                			      ticks=[25, 35, 45, 57.5]
-                		         )
-    cbar_proxy.ax.set_xticklabels(["Leve", "Moderado", "Fuerte", "Extremo"], fontsize=11)
-    cbar_proxy.ax.tick_params(axis='x', length=0)
-    
-    for poly_idx, poly in enumerate(warning_polygons):
-        
-        current_id = poly_idx + 1
+    cbar = plt.colorbar(im_proxy, ax=ax, orientation="horizontal", pad=0.01, shrink=0.65, ticks=[25, 35, 45, 57.5])
+    cbar.ax.set_xticklabels(["Leve", "Moderado", "Fuerte", "Extremo"], fontsize=11)
+    cbar.ax.tick_params(axis="x", length=0)
 
-        if highlight_poly_id == current_id:
-            edge_color = "red"
-            line_width = 2.5
-            hatch_pattern = '///'
-            zorder = 7
-        else:
-            edge_color = "#219ebc"  # Contorno tipo SIGMET
-            line_width = 1.5
-            hatch_pattern = '///'
-            zorder = 6
+    # Polígonos de advertencia
+    for idx, poly in enumerate(warning_polygons):
+        current_id = idx + 1
+        is_sel = highlight_poly_id == current_id
 
-        # Se agrega el parámetro hatch manteniendo facecolor='none'
         ax.add_geometries(
-                           [poly],
-                           ccrs.PlateCarree(),
-                           facecolor='none',          # Sin relleno sólido para ver los ecos de radar debajo
-                           edgecolor=edge_color,
-                           linewidth=line_width,
-                           linestyle='-',
-                           hatch=hatch_pattern,       # <-- Líneas diagonales
-                           zorder=zorder
+                          [poly],
+                          ccrs.PlateCarree(),
+                          facecolor="none",
+                          edgecolor="red" if is_sel else "#219ebc",
+                          linewidth=2.5 if is_sel else 1.5,
+                          hatch="///",
+                          zorder=7 if is_sel else 6,
                          )
-        
+
         if not metrics_df.empty and current_id in metrics_df["ID"].values:
-            
-            row_poly = metrics_df[metrics_df["ID"] == current_id].iloc[0]
+            row = metrics_df[metrics_df["ID"] == current_id].iloc[0]
+            if row.EjeMayor_km >= 100:
+                rumbo = float(str(row.Orientacion).replace("°", ""))
+                arrow_km = min(row.EjeMayor_km * 0.4, 60.0)
+                dlat = (arrow_km / 111.32) * np.cos(np.radians(rumbo))
+                dlon = (arrow_km / (111.32 * np.cos(np.radians(row.CenLat)))) * np.sin(np.radians(rumbo))
 
-            # Solo dibujamos flecha en sistemas con alargamiento perceptible (ej. eje mayor > 40 km)
-            if row_poly.EjeMayor_km >= 100:
-                cen_x = row_poly.CenLon
-                cen_y = row_poly.CenLat
-                rumbo_deg = float(str(row_poly.Orientacion).replace("°", ""))
-
-                # Semilongitud en grados aproximados para dibujar la flecha
-                # Limitamos la longitud visual para que no tape todo el polígono
-                arrow_len_km = min(row_poly.EjeMayor_km * 0.4, 60.0)
-                lat_rad = np.radians(cen_y)
-                dlat = (arrow_len_km / 111.32) * np.cos(np.radians(rumbo_deg))
-                dlon = ((arrow_len_km / (111.32 * np.cos(lat_rad))) * np.sin(np.radians(rumbo_deg)))
-
-                # Flecha bidireccional alineada con el eje mayor del Convex Hull
                 ax.annotate(
                             "",
-                            xy=(cen_x + dlon, cen_y + dlat),
-                            xytext=(cen_x - dlon, cen_y - dlat),
+                            xy=(row.CenLon + dlon, row.CenLat + dlat),
+                            xytext=(row.CenLon - dlon, row.CenLat - dlat),
                             arrowprops=dict(
-                                            arrowstyle="<->, head_width=0.2, head_length=0.3",
-                                            color="red" if highlight_poly_id == current_id else edge_color,
-                                            linewidth=2.0 if highlight_poly_id == current_id else 1.2,
-                                            mutation_scale=12,
-                                           ),
+                                arrowstyle="<->, head_width=0.2, head_length=0.3",
+                                color="red" if is_sel else "#219ebc",
+                                linewidth=2.0 if is_sel else 1.2,
+                                mutation_scale=12,
+                            ),
                             xycoords=ccrs.PlateCarree()._as_mpl_transform(ax),
-                            zorder=zorder + 1,
+                            zorder=8,
                            )
 
-    #plt.title(
-    #    f"GOES-19 Canal 13 IR + Proxy radar GLM 5-min\n"
-    #    f"{start_window.strftime('%Y-%m-%d %H:%M UTC')}", fontsize=12
-    #)
-    
+    plt.tight_layout()
+    return fig
+
+
+def plot_parallel_coordinates(
+    metrics_df: pd.DataFrame, highlight_poly_id: Optional[int] = None) -> Optional[plt.Figure]:
+    """Genera coordenadas paralelas normalizadas con marcas reales y resaltado dinámico."""
+    if metrics_df.empty or len(metrics_df) < 2:
+        return None
+
+    df = metrics_df.copy()
+    df["Orientacion_Num"] = df["Orientacion"].str.replace("°", "").astype(float)
+
+    cols = ["Area", "EjeMayor_km", "EjeMenor_km", "Orientacion_Num", "MaxFL", "MaxH_km", "MaxRef", "MinCTT"]
+    titulos = ["Área\n(km²)", "Eje Mayor\n(km)", "Eje Menor\n(km)", "Rumbo\n(°)", "Tope\n(FL)", "Tope\n(km)", "Refl. Máx\n(dBZ)", "Min CTT\n(°C)"]
+
+    mins, maxs = df[cols].min(), df[cols].max()
+    ranges = maxs - mins
+    ranges[ranges == 0] = 1.0
+
+    df_norm = (df[cols] - mins) / ranges
+    df_norm["Tipo"] = df["Tipo"]
+    df_norm["ID"] = df["ID"]
+
+    color_dict = {"IC": "#2a9d8f", "CC": "#e9c46a", "QLCS": "#f4a261", "MCS": "#e76f51"}
+    fig, ax = plt.subplots(figsize=(14, 5.2))
+    has_sel = highlight_poly_id is not None and highlight_poly_id in df_norm["ID"].values
+
+    # Líneas de fondo no seleccionadas
+    for _, r in df_norm.iterrows():
+        if has_sel and (r["ID"] == highlight_poly_id):
+            continue
+        ax.plot(
+            range(len(cols)),
+            [r[c] for c in cols],
+            color="#ced4da" if has_sel else color_dict.get(r["Tipo"], "gray"),
+            linewidth=1.0 if has_sel else 1.5,
+            alpha=0.20 if has_sel else 0.55,
+            zorder=2,
+        )
+
+    # Línea seleccionada en primer plano
+    if has_sel:
+        sel_n = df_norm[df_norm["ID"] == highlight_poly_id].iloc[0]
+        sel_r = df[df["ID"] == highlight_poly_id].iloc[0]
+        y_sel = [sel_n[c] for c in cols]
+
+        ax.plot(
+            range(len(cols)),
+            y_sel,
+            color="red",
+            linewidth=3.5,
+            alpha=1.0,
+            zorder=10,
+            marker="o",
+            markersize=7,
+            markerfacecolor="red",
+            markeredgecolor="white",
+            markeredgewidth=1.5,
+        )
+
+        for i, col in enumerate(cols):
+            val = sel_r[col]
+            txt = f"{val:.0f}" if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"] else f"{val:.1f}"
+            ax.text(
+                i,
+                y_sel[i] + 0.04,
+                txt,
+                fontsize=9,
+                color="red",
+                fontweight="bold",
+                ha="center",
+                va="bottom",
+                zorder=12,
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="red", alpha=0.85, linewidth=0.8),
+            )
+
+    # Ejes verticales y rótulos cuantitativos
+    for i, col in enumerate(cols):
+        ax.axvline(i, color="#adb5bd", linestyle="-", linewidth=1.2, zorder=1)
+        for y_n in [0.0, 0.25, 0.5, 0.75, 1.0]:
+            v = mins[col] + y_n * (maxs[col] - mins[col])
+            s = f"{v:.0f}" if col in ["Area", "EjeMayor_km", "MaxFL", "Orientacion_Num"] else f"{v:.1f}"
+            ax.plot([i - 0.03, i + 0.03], [y_n, y_n], color="#6c757d", linewidth=0.8, zorder=2)
+            ax.text(i - 0.05, y_n, s, fontsize=8, color="#6c757d", ha="right", va="center", zorder=4)
+
+    ax.set_xticks(range(len(cols)))
+    ax.set_xticklabels(titulos, fontsize=10, fontweight="bold")
+    ax.set_yticks([])
+    ax.set_xlim(-0.35, len(cols) - 0.65)
+    ax.set_ylim(-0.06, 1.14)
+    for spine in ["top", "bottom", "left", "right"]:
+        ax.spines[spine].set_visible(False)
+    ax.grid(False)
+
+    legend_items = [
+        Line2D([0], [0], color=c, lw=2.5, label=t) for t, c in color_dict.items() if t in df_norm["Tipo"].values
+    ]
+    if has_sel:
+        legend_items.append(Line2D([0], [0], color="red", lw=3.0, marker="o", label=f"Selección (ID: {highlight_poly_id})"))
+    ax.legend(handles=legend_items, loc="upper right", bbox_to_anchor=(1.0, 1.15), ncol=len(legend_items), frameon=True, framealpha=0.9)
+
     plt.tight_layout()
     return fig
 
 # ============================================================================ #
-# 3. Estructura de la aplicación Streamlit (Main App Logic)
+# 4. Interfaz de Usuario (Streamlit Presentation Layer)
 # ============================================================================ #
 
-st.set_page_config(layout="wide")
-st.image("smn_horizontal_arg-01.jpg", width=250) 
-st.title(":blue[Producto TS-SIGMET | Dashboard Interactivo (EXPERIMENTAL)]")
-
-# --- Glosario expansible de referencias ---
-with st.expander("⚠️ **Referencia de tipo de tormenta y seguridad operacional**"):
+def main() -> None:
+    """Punto de entrada principal de la aplicación Streamlit."""
+    st.set_page_config(layout="wide")
+    st.image("smn_horizontal_arg-01.jpg", width=250)
+    st.title(":blue[Producto TS-SIGMET | Dashboard Interactivo (EXPERIMENTAL)]")
     
-    st.markdown("""
-    Esta clasificación tipifica los sistemas convectivos a partir de su **morfología radar** (longitud del eje mayor, relación de aspecto y extensión superficial), siguiendo criterios adaptados de la literatura meteorológica (*Parker & Johnson; Gallus et al.*) para la toma de decisiones aeronáuticas y la emisión de mensajes SIGMET:
+    with st.expander("⚠️ **Manual Operativo: Clasificación Convectiva, Morfología Radar y Seguridad Operacional**"):
+        st.markdown("""
+        ### Criterios de Clasificación Morfológica y Toma de Decisiones
 
-    *   **CELDA AISLADA (IC - Isolated Cell):**
-        *   **Criterio geométrico:** Eje mayor $< 50\\text{ km}$ y relación de aspecto $\\text{L}/\\text{W} < 2.5$.
-        *   **Estructura:** Celdas convectivas ordinarias individuales o tormentas unicelulares/pulsantes de escala local.
-        *   **Impacto operacional:** Desvíos tácticos directos de corto radio. Generalmente resultan sencillas de circunvalar por las tripulaciones mediante el uso del radar de a bordo (RDR) y contacto visual, requiriendo alteraciones mínimas de rumbo autorizadas por el ATC.
-    
-    *   **CLÚSTER MULTICELULAR (CC - Cluster of Cells):**
-        *   **Criterio geométrico:** Área $\\ge 400\\text{ km}^2$ o eje mayor $\\ge 50\\text{ km}$, con relación de aspecto no lineal ($\\text{L}/\\text{W} < 3.0$).
-        *   **Estructura:** Agrupaciones convectivas desorganizadas o complejos de múltiples celdas en diferentes etapas de desarrollo que no presentan una alineación rectilínea predominante.
-        *   **Impacto operacional:** Bloqueo de aerovías locales y sectores de aproximación terminal (TMA). Obligan a una navegación táctica compleja entre celdas; la presencia de *gaps* o corredores falsos entre núcleos puede exponer a las aeronaves a turbulencia severa en aire claro y cizalladura de viento (*windshear*).
-    
-    *   **LÍNEA CONVECTIVA / SISTEMA CUASI-LINEAL (QLCS - Quasi-Linear Convective System):**
-        *   **Criterio geométrico:** Eje mayor $\\ge 100\\text{ km}$ y marcada relación de aspecto ($\\text{L}/\\text{W} \\ge 3.0$).
-        *   **Estructura:** Líneas de inestabilidad (*squall lines*), frentes fríos activos y líneas de turbonada con frentes de ráfagas bien definidos a lo largo de su eje de avance.
-        *   **Impacto operacional:** Bloqueo transversal severo y continuo de rutas y aerovías. La penetración directa a través de la línea está formalmente contraindicada. Exige desvíos estratégicos tempranos alrededor de los extremos de la línea (o esperas operacionales), asociados a severa turbulencia, granizo en niveles de crucero y engelamiento moderado a severo.
-    
-    *   **SISTEMA CONVECTIVO DE MESOESCALA (MCS - Mesoscale Convective System):**
-        *   **Criterio geométrico:** Área del sistema $\\ge 1000\\text{ km}^2$ o extensión combinada con eje mayor $\\ge 100\\text{ km}$ y eje menor $\\ge 40\\text{ km}$.
-        *   **Estructura:** Complejos Convectivos de Mesoescala (MCC) o sistemas convectivos maduros con extensas áreas de nubes de fase mixta y precipitación estratiforme que engloban múltiples núcleos convectivos intensos.
-        *   **Impacto operacional:** Disrupción masiva del espacio aéreo con capacidad de colapsar Regiones de Información de Vuelo (FIR) completas. Provoca desvíos estratégicos interprovinciales, demoras generalizadas en tierra, cierre preventivo de aeródromos por actividad eléctrica generalizada y cimas nubosas que frecuentemente superan el nivel de vuelo FL400.
-    """)
-# -------------------------------------------------
+        El sistema procesa la geometría de la envolvente convexa simplificada (*Convex Hull*) y el campo de reflectividad proxy para categorizar las tormentas según taxonomías estandarizadas (*Parker & Johnson; Gallus et al.*) adaptadas al monitoreo y emisión de mensajes **TS-SIGMET**.        """)
 
-initial_datetime = datetime(2023, 12, 17, 6, 0, 0) 
+        # Tabla comparativa de umbrales cuantitativos
+        st.markdown("""
+                    | Categoría | Acrónimo | Eje Mayor (L) | Relación de Aspecto (L/W) | Cobertura (A) | Reflectividad Típica |
+                    | :--- | :---: | :---: | :---: | :---: | :---: |
+                    | **Celda Aislada** | `IC` | <50 km | <2.5 | < 400 km² | 35 – 50 dBZ |
+                    | **Clúster Multicelular** | `CC` | >50 km | <3 | >400 km² | 40 – 55 dBZ |
+                    | **Línea Convectiva** | `QLCS` | >100 km | >3 | Variable | 45 – >60 dBZ |
+                    | **Sistema Mesoescalar** | `MCS` | >100 km | Variable | >1000 km² | 40 – >55 dBZ |
+                    """)
 
-selected_date = st.date_input(":blue[Selecciona la fecha]", value=initial_datetime.date())
-selected_time = st.time_input(":blue[Selecciona la hora (UTC)]", value=initial_datetime.time(), step=300) 
+        st.markdown("---")
 
-start_window_user = datetime.combine(selected_date, selected_time)
+        # Tarjetas desglosadas por tipología
+        t1, t2 = st.columns(2)
 
-data = load_and_process_data(start_window_user, fs_global)
+        with t1:
+            st.markdown("""
+            #### 🟢 **Celda Aislada (IC - Isolated Cell)**
+            * **Estructura Meteorológica:** Celdas convectivas pulsantes u ordinarias de escala local con corrientes ascendentes y descendentes bien delimitadas.
+            * **Peligros Principales:** Microfrentes de ráfagas locales (*microbursts*), granizo localizado y turbulencia severa acotada al núcleo y su entorno inmediato (< 5 NM).
+            * **Gestión de Tránsito Aéreo (ATC) & Pilotos:**
+                * Desvíos tácticos mínimos (5 a 10 NM a barlovento).
+                * Alta probabilidad de circunnavegación visual o con radar de a bordo (WXR) sin saturar los sectores terminales.
+            """)
 
-if data is None: 
-    st.warning(":blue[No se pudieron cargar los datos para la fecha y hora seleccionadas. Intenta con otra fecha/hora.]")
-else:
+            st.markdown("""
+            #### 🟡 **Clúster Multicelular (CC - Cluster of Cells)**
+            * **Estructura Meteorológica:** Agrupación desorganizada o semiorganizada de celdas en diferentes etapas de ciclo de vida (iniciación, madurez, disipación).
+            * **Peligros Principales:** Turbulencia severa en aire claro (CAT), engelamiento fuerte en niveles medios y presencia de "corredores engañosos" (*blind alleys*) entre núcleos activos.
+            * **Gestión de Tránsito Aéreo (ATC) & Pilotos:**
+                * Prohibida la penetración a través de brechas estrechas entre ecos con reflectividad > 35 dBZ.
+                * Rutas de desvío estratégicas; requiere coordinación temprana con control de ruta para evitar atrapamiento entre celdas secundarias.
+            """)
+
+        with t2:
+            st.markdown("""
+            #### 🟠 **Sistema Cuasi-Lineal / Línea de Inestabilidad (QLCS)**
+            * **Estructura Meteorológica:** Banda convectiva alargada y continua (*Squall Line* / frente frío activo) con fuerte forzamiento dinámico lineal.
+            * **Peligros Principales:** Frentes de ráfagas violentos (*gust fronts*), cizalladura horizontal/vertical del viento (*low-level windshear*), turbulencia extrema a lo largo del frente y granizo que puede proyectarse varios kilómetros por delante del borde de ataque.
+            * **Gestión de Tránsito Aéreo (ATC) & Pilotos:**
+                * **Bloqueo transversal total de aerovías:** La penetración frontal está formalmente contraindicada.
+                * Se requieren desvíos de largo radio circunvalando los extremos de la línea o demoras en circuito de espera hasta el pasaje del sistema.
+            """)
+
+            st.markdown("""
+            #### 🔴 **Sistema Convectivo de Mesoescala (MCS)**
+            * **Estructura Meteorológica:** Complejo convectivo de gran escala con extensas regiones de lluvia estratiforme electrificada que engloba múltiples núcleos de tormenta severa y topes que habitualmente sobrepasan la tropopausa.
+            * **Peligros Principales:** Engelamiento severo generalizado en niveles de crucero, cimas nubosas penetrantes (overshooting tops) que superan **FL400**, y actividad eléctrica intra-nube y nube-tierra continua.
+            * **Gestión de Tránsito Aéreo (ATC) & Pilotos:**
+                * **Disrupción masiva del espacio aéreo (escala FIR):** Colapso de rutas troncales y sectores de control.
+                * Exige reformulación de planes de vuelo, desvíos interprovinciales obligatorios y aplicación inmediata de procedimientos de contingencia y espaciamiento por flujo (ATFM).
+            """)
+
+        st.info(
+            "💡 **Pauta Operativa Anexo 3 OACI:** Todo eco con reflectividad >40 dBZ o topes >FL350 debe ser considerado zona de exclusión de vuelo con margen de seguridad horizontal mínimo de 20 NM a barlovento."        )
+
+    initial_dt = datetime(2023, 12, 17, 6, 0, 0)
+    sel_date = st.date_input(":blue[Selecciona la fecha]", value=initial_dt.date())
+    sel_time = st.time_input(":blue[Selecciona la hora (UTC)]", value=initial_dt.time(), step=300)
+    start_window = datetime.combine(sel_date, sel_time)
+
+    data = load_and_process_data(start_window, FS_GLOBAL)
+    if data is None:
+        st.warning(":blue[No se pudieron cargar los datos para la fecha y hora seleccionadas.]")
+        return
+
     warning_polygons = data["warning_polygons"]
     metrics_df = data["metrics_df"]
-
     if not metrics_df.empty:
-        metrics_df = metrics_df.sort_values(by='Area', ascending=False).reset_index(drop=True)
+        metrics_df = metrics_df.sort_values(by="Area", ascending=False).reset_index(drop=True)
 
     col1, col2 = st.columns([1, 1])
 
     with col2:
         st.header(":blue[Tabla de Advertencias]")
-
-        options = [f"ID: {int(row.ID)}, Tipo: {row.Tipo}, Tope: FL{int(row.MaxFL):03d}, Area: {int(row.Area)} km²"
-                   for idx, row in metrics_df.iterrows()]  
+        options = [
+                   f"ID: {int(r.ID)}, Tipo: {r.Tipo}, Tope: FL{int(r.MaxFL):03d}, Area: {int(r.Area)} km²"
+                   for _, r in metrics_df.iterrows()
+                  ]
         options.insert(0, "-- Seleccionar Polígono --")
 
-        selected_option = st.selectbox(
-                                        ":blue[Seleccionar una advertencia para resaltar en el mapa:]",
-                                        options,
-                                        index=0
-                                      )
-           
+        selected_option = st.selectbox(":blue[Seleccionar una advertencia para resaltar en el mapa:]", options, index=0)
+
         highlight_poly_id = None
         if selected_option != "-- Seleccionar Polígono --":
-            highlight_poly_id = int(float(selected_option.split(',')[0].replace('ID: ', '')))
-            
-            st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
+            highlight_poly_id = int(float(selected_option.split(",")[0].replace("ID: ", "")))
             poly_data = metrics_df[metrics_df["ID"] == highlight_poly_id].iloc[0]
 
+            st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
             mc1, mc2, mc3, mc4 = st.columns(4)
-            mc1.metric(
-                       "Tope Máximo",
-                       f"FL{int(poly_data.MaxFL):03d}",
-                       delta=f"{poly_data.MaxH:.1f} km",
-                       delta_color="off",
-                      )
+            mc1.metric("Tope Nuboso", f"FL{int(poly_data.MaxFL):03d}", delta=f"{poly_data.MaxH_km:.1f} km", delta_color="off")
             mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
             mc3.metric("Área Envolvente", f"{poly_data.Area:.0f} km²")
             mc4.metric("Clasificación", f"{poly_data.Tipo}", help=poly_data.Descripcion)
 
             mc5, mc6, mc7 = st.columns(3)
             mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
-            mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")         
-            arrow_symbol = rumbo_to_arrow(int(poly_data.Orientacion.replace("°", "")))
-            mc7.metric("Orientación", f"{poly_data.Orientacion}", delta=arrow_symbol)  # delta muestra la flecha y dirección
-            
-            # Impacto Operacional Resaltado
-            st.markdown(
-                        f"""
-                        <div style="background-color: #ffebee; border-left: 5px solid #d32f2f; padding: 10px 14px; border-radius: 4px; margin-top: 10px; margin-bottom: 12px;">
-                            <span style="color: #b71c1c; font-weight: bold; font-size: 20px;">🚨 IMPACTO OPERACIONAL</span>
-                            <p style="color: #c62828; margin: 4px 0 0 0; font-size: 18px;">{poly_data.Impacto}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                       )
-        
+            mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")
+            mc7.metric(
+                       "Orientación",
+                       f"{poly_data.Orientacion}",
+                       delta=rumbo_to_arrow(int(str(poly_data.Orientacion).replace("°", ""))),
+                      )
+
+            st.error(f"🚨 **Impacto Operacional Estimado:** {poly_data.Impacto}")
+
         st.dataframe(
                      metrics_df,
-                     column_order=["ID", "Tipo", "Area", "MaxH", "MaxFL", "MaxRef", "MinCTT", "MaxFED"],
-                     height=600,
+                     column_order=["ID", "Tipo", "Area", "MaxFL", "MaxH_km", "MaxRef", "MinCTT", "MaxFED"],
+                     height=450,
                      hide_index=True,
                     )
 
@@ -1056,45 +858,56 @@ else:
             csv_buffer = io.StringIO()
             metrics_df.to_csv(csv_buffer, index=False)
             st.download_button(
-                label="Descargar métricas como CSV",
-                data=csv_buffer.getvalue(),
-                file_name="warning_polygons_metrics.csv",
-                mime="text/csv",
-            )
-            
+                               label="Descargar métricas como CSV",
+                               data=csv_buffer.getvalue(),
+                               file_name=f"sigmet_metrics_{start_window.strftime('%Y%m%d_%H%M')}.csv",
+                               mime="text/csv",
+                              )
+
     with col1:
         st.header(":blue[Mapa de Advertencias]")
-        fig = plot_interactive_map_streamlit(
-            warning_polygons, metrics_df,
-		    data["ir_data"], data["x"], data["y"], data["abi_crs"],
-		    data["max_reflectivity_proxy"], data["lon_mesh_high"], data["lat_mesh_high"],
-		    data["lon_min"], data["lon_max"], data["lat_min"], data["lat_max"],
-		    data["paises"], data["fir_ezeiza"], data["fir_cordoba"], data["fir_resistencia"], data["fir_mendoza"], data["fir_comodoro"],
-		    data["df_airports"], data["start_window"],
-		    highlight_poly_id=highlight_poly_id
-        )
-        st.pyplot(fig)
-      
-# ============================================================================ #
-# 4. Sección de Análisis Multivariado: Parallel Coordinates Plot
-# ============================================================================ #
+        fig_map = plot_interactive_map_streamlit(
+                                                 warning_polygons,
+                                                 metrics_df,
+                                                 data["ir_data"],
+                                                 data["x"],
+                                                 data["y"],
+                                                 data["abi_crs"],
+                                                 data["max_reflectivity_proxy"],
+                                                 data["lon_mesh"],
+                                                 data["lat_mesh"],
+                                                 data["paises"],
+                                                 data["fir_ezeiza"],
+                                                 data["fir_cordoba"],
+                                                 data["fir_resistencia"],
+                                                 data["fir_mendoza"],
+                                                 data["fir_comodoro"],
+                                                 data["df_airports"],
+                                                 data["start_window"],
+                                                 highlight_poly_id=highlight_poly_id,
+                                                )
+        st.pyplot(fig_map)
 
-st.markdown("---")
-st.subheader(":blue[Análisis Multivariado de Propiedades de las Tormentas]")
+    # Análisis Multivariado
+    st.markdown("---")
+    st.subheader(":blue[Análisis Multivariado de Propiedades de las Tormentas]")
 
-with st.expander("⚠️ ¿Cómo interpretar este gráfico?", expanded=False):
+    with st.expander("ℹ️ ¿Cómo interpretar este gráfico?", expanded=False):
         st.markdown("""
         * **Cada línea representa un polígono SIGMET detectado.**
         * **Color de la línea:** Clasificación morfológica (**IC:** Verde azulado, **CC:** Amarillo, **QLCS:** Naranja, **MCS:** Rojo coral).
+        * **Sincronización:** Al seleccionar un polígono en la lista superior, su trayectoria se resalta en **rojo** con etiquetas de valor puntual sobre cada eje.
         """)
 
-if not metrics_df.empty and len(metrics_df) >= 2:
-        fig_parallel = plot_parallel_coordinates(
-                                                 metrics_df, highlight_poly_id=highlight_poly_id
-                                                )
+    if not metrics_df.empty and len(metrics_df) >= 2:
+        fig_parallel = plot_parallel_coordinates(metrics_df, highlight_poly_id=highlight_poly_id)
         if fig_parallel is not None:
-                  st.pyplot(fig_parallel)
-else:
-    st.info("Se requieren al menos 2 advertencias detectadas para trazar el gráfico de coordenadas paralelas.")
-    
+            st.pyplot(fig_parallel)
+    else:
+        st.info("Se requieren al menos 2 advertencias detectadas para trazar el gráfico de coordenadas paralelas.")
+
+
+if __name__ == "__main__":
+    main()
+
 # ============================================================================ #
