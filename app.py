@@ -811,6 +811,7 @@ def main() -> None:
     if not metrics_df.empty:
         metrics_df = metrics_df.sort_values(by="Area", ascending=False).reset_index(drop=True)
 
+    highlight_poly_id = None
     col1, col2 = st.columns([1, 1])
 
     with col1:
