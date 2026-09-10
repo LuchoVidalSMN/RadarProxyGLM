@@ -427,14 +427,14 @@ def load_and_process_data(
     lon_mesh, lat_mesh = np.meshgrid((lon_bins[:-1] + lon_bins[1:]) / 2, (lat_bins[:-1] + lat_bins[1:]) / 2)
 
     # Segmentación y filtrado espacial
-    raw_polys = cluster_and_get_polygons(max_reflectivity_proxy, 25, lon_mesh, lat_mesh, min_area_km2=300.0)
+    raw_polys = cluster_and_get_polygons(max_reflectivity_proxy, 25, lon_mesh, lat_mesh)
     plot_box = box(bounds["plot_lon_min"], bounds["plot_lat_min"], bounds["plot_lon_max"], bounds["plot_lat_max"])
     warning_polygons = [p for p in raw_polys if p.intersects(plot_box)]
 
     metrics_list, sigmet_hulls = [], []
     grid_points = [Point(lo, la) for lo, la in zip(lon_mesh.flatten(), lat_mesh.flatten())]
 
-    min_area_sigmet = 400.0  # Umbral en km² del Convex Hull
+    min_area_sigmet = 500.0  # Umbral en km² del Convex Hull
 
     for idx, poly in enumerate(warning_polygons):
         
