@@ -829,16 +829,17 @@ def main() -> None:
             poly_data = metrics_df[metrics_df["ID"] == highlight_poly_id].iloc[0]
 
             st.markdown(f"### Detalles de la Tormenta (ID: {highlight_poly_id})")
-            mc1, mc2, mc3, mc4 = st.columns(4)
-            mc1.metric("Tope Nuboso", f"FL{int(poly_data.MaxFL):03d}", delta=f"{poly_data.MaxH_km:.1f} km", delta_color="off")
-            mc2.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
-            mc3.metric("Área Envolvente", f"{poly_data.Area:.0f} km²")
-            mc4.metric("Clasificación", f"{poly_data.Tipo}", help=poly_data.Descripcion)
+            mc1, mc2 = st.columns(2)
+            mc1.metric("Clasificación", f"{poly_data.Tipo}", help=poly_data.Descripcion)
+            mc2.metric("Tope Nuboso", f"FL{int(poly_data.MaxFL):03d}", delta=f"{poly_data.MaxH_km:.1f} km", delta_color="off")
+            
+            mc3, mc4 = st.columns(2)
+            mc3.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
+            mc4.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")
 
-            mc5, mc6, mc7 = st.columns(3)
-            mc5.metric("Eje Mayor", f"{poly_data.EjeMayor_km:.0f} km")
-            mc6.metric("Eje Menor", f"{poly_data.EjeMenor_km:.0f} km")
-            mc7.metric(
+            mc3, mc4 = st.columns(2)
+            mc3.metric("Reflectividad", f"{poly_data.MaxRef:.1f} dBZ")
+            mc4.metric(
                        "Orientación",
                        f"{poly_data.Orientacion}",
                        delta=rumbo_to_arrow(int(str(poly_data.Orientacion).replace("°", ""))),
@@ -886,7 +887,7 @@ def main() -> None:
                                                  data["start_window"],
                                                  highlight_poly_id=highlight_poly_id,
                                                 )
-        st.pyplot(fig_map)
+        st.pyplot(fig_map, use_container_width=True)
 
     # Análisis Multivariado
     st.markdown("---")
@@ -902,7 +903,7 @@ def main() -> None:
     if not metrics_df.empty and len(metrics_df) >= 2:
         fig_parallel = plot_parallel_coordinates(metrics_df, highlight_poly_id=highlight_poly_id)
         if fig_parallel is not None:
-            st.pyplot(fig_parallel)
+            st.pyplot(fig_parallel, use_container_width=True)
     else:
         st.info("Se requieren al menos 2 advertencias detectadas para trazar el gráfico de coordenadas paralelas.")
 
