@@ -434,7 +434,7 @@ def load_and_process_data(
     metrics_list, sigmet_hulls = [], []
     grid_points = [Point(lo, la) for lo, la in zip(lon_mesh.flatten(), lat_mesh.flatten())]
 
-    min_area_sigmet = 300.0  # Umbral en km² del Convex Hull
+    min_area_sigmet = 400.0  # Umbral en km² del Convex Hull
 
     for idx, poly in enumerate(warning_polygons):
         
