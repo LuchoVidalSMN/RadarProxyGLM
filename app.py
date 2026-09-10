@@ -813,6 +813,30 @@ def main() -> None:
 
     col1, col2 = st.columns([1, 1])
 
+    with col1:
+        st.header(":blue[Mapa de Advertencias]")
+        fig_map = plot_interactive_map_streamlit(
+                                                 warning_polygons,
+                                                 metrics_df,
+                                                 data["ir_data"],
+                                                 data["x"],
+                                                 data["y"],
+                                                 data["abi_crs"],
+                                                 data["max_reflectivity_proxy"],
+                                                 data["lon_mesh"],
+                                                 data["lat_mesh"],
+                                                 data["paises"],
+                                                 data["fir_ezeiza"],
+                                                 data["fir_cordoba"],
+                                                 data["fir_resistencia"],
+                                                 data["fir_mendoza"],
+                                                 data["fir_comodoro"],
+                                                 data["df_airports"],
+                                                 data["start_window"],
+                                                 highlight_poly_id=highlight_poly_id,
+                                                )
+        st.pyplot(fig_map, use_container_width=True)
+        
     with col2:
         st.header(":blue[Tabla de Advertencias]")
         options = [
@@ -864,30 +888,6 @@ def main() -> None:
                                file_name=f"sigmet_metrics_{start_window.strftime('%Y%m%d_%H%M')}.csv",
                                mime="text/csv",
                               )
-
-    with col1:
-        st.header(":blue[Mapa de Advertencias]")
-        fig_map = plot_interactive_map_streamlit(
-                                                 warning_polygons,
-                                                 metrics_df,
-                                                 data["ir_data"],
-                                                 data["x"],
-                                                 data["y"],
-                                                 data["abi_crs"],
-                                                 data["max_reflectivity_proxy"],
-                                                 data["lon_mesh"],
-                                                 data["lat_mesh"],
-                                                 data["paises"],
-                                                 data["fir_ezeiza"],
-                                                 data["fir_cordoba"],
-                                                 data["fir_resistencia"],
-                                                 data["fir_mendoza"],
-                                                 data["fir_comodoro"],
-                                                 data["df_airports"],
-                                                 data["start_window"],
-                                                 highlight_poly_id=highlight_poly_id,
-                                                )
-        st.pyplot(fig_map, use_container_width=True)
 
     # Análisis Multivariado
     st.markdown("---")
