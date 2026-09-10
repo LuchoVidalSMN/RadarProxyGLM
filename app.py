@@ -111,7 +111,6 @@ def pressure_to_flight_level(p_hpa: float) -> Optional[int]:
     fl_exact = alt_ft / 100.0
     return int(round(fl_exact / 10.0) * 10)
 
-
 def pressure_to_altitude_km(p_hpa: float) -> float:
     """Convierte la presión en hPa a altitud geopotencial en kilómetros (km).
 
@@ -135,7 +134,6 @@ def pressure_to_altitude_km(p_hpa: float) -> float:
 
     return round((alt_ft * 0.3048) / 1000.0, 1)
 
-
 def rumbo_to_arrow(angle_deg: float) -> str:
     """Genera una flecha y acrónimo azimutal a partir del ángulo con el Norte."""
     val = angle_deg % 180.0
@@ -146,7 +144,6 @@ def rumbo_to_arrow(angle_deg: float) -> str:
     elif 67.5 < val <= 112.5:
         return "↔ W-E"
     return "↘ NW-SE"
-
 
 def compute_sigmet_convex_hull_properties(
     poly: Polygon, simplify_deg: float = 0.08) -> Dict[str, Any]:
@@ -192,7 +189,6 @@ def compute_sigmet_convex_hull_properties(
             "orientation_deg": int(round(angle_deg)),
             "area_hull_km2": round(area_hull_km2, 1),
            }
-
 
 def classify_convective_morphology(
     area_km2: float, major_axis_km: float, minor_axis_km: float, max_dbz: float) -> Dict[str, str]:
