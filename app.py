@@ -284,7 +284,7 @@ def cluster_and_get_polygons(
     threshold_dbz: float,
     lon_mesh: np.ndarray,
     lat_mesh: np.ndarray,
-    min_area_km2: float = 300.0,) -> List[Polygon]:
+    min_area_km2: float = 100.0,) -> List[Polygon]:
     """Segmenta núcleos convectivos y los transforma en polígonos cerrados."""
     thresholded = reflectivity_data >= threshold_dbz
     labeled_arr, num_features = label(thresholded)
@@ -427,7 +427,7 @@ def load_and_process_data(
     lon_mesh, lat_mesh = np.meshgrid((lon_bins[:-1] + lon_bins[1:]) / 2, (lat_bins[:-1] + lat_bins[1:]) / 2)
 
     # Segmentación y filtrado espacial
-    raw_polys = cluster_and_get_polygons(max_reflectivity_proxy, 25, lon_mesh, lat_mesh)
+    raw_polys = cluster_and_get_polygons(max_reflectivity_proxy, 25, lon_mesh, lat_mesh, min_area_km2=300.0)
     plot_box = box(bounds["plot_lon_min"], bounds["plot_lat_min"], bounds["plot_lon_max"], bounds["plot_lat_max"])
     warning_polygons = [p for p in raw_polys if p.intersects(plot_box)]
 
